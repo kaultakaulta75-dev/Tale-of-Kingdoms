@@ -1,45 +1,26 @@
 modLoader = "javafml"
 loaderVersion = "[4,)"
-issueTrackerURL="https://github.com/SamB440/tale-of-kingdoms/issues"
+issueTrackerURL = "https://github.com/kaultakaulta75-dev/Tale-of-Kingdoms/issues"
 license = "GPL-3.0"
-
-[properties]
-"connector:placeholder"=true
 
 [[mods]]
 modId = "taleofkingdoms"
 version = "${version}"
-displayName = "Tale of Kingdoms: A new Conquest"
-authors = "SamB440"
+displayName = "Tale of Kingdoms: A New Conquest"
+authors = "SamB440; NeoForge port by kaultakaulta75-dev"
 credits = "Marackai, Aksel0206, PyroPyxel, Sheepguard, michaelb229, Krol05, BeingAmazing(Ben)"
 description = '''
-This mod is in alpha. Use at your own risk!
+Experimental native NeoForge port for Minecraft 1.21.1.
 
-The Tale of Kingdoms mod, revived.
-
-Enter a dangerous realm of knights and honour, fight your way through the hordes of evil and forge your very own kingdom under your reign. Begin your adventure. Prove to the Guildmaster that you are worthy. Be the hero you were born for.
+Enter a dangerous realm of knights and honour, prove yourself to the Guildmaster,
+complete quests, and forge your own kingdom.
 '''
 logoFile = "assets/taleofkingdoms/logo.png"
 
 [[dependencies.taleofkingdoms]]
-modId="connector"
-type = "required"
-mandatory=true
-versionRange="*"
-ordering="NONE"
-side="BOTH"
-
-[[dependencies.taleofkingdoms]]
-modId = "owo"
-type = "required"
-versionRange = "[0.12.10,)"
-ordering = "NONE"
-side = "BOTH"
-
-[[dependencies.taleofkingdoms]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.1,)"
+versionRange = "[21.1.226,)"
 ordering = "NONE"
 side = "BOTH"
 
@@ -50,5 +31,29 @@ versionRange = "[1.21.1]"
 ordering = "NONE"
 side = "BOTH"
 
+[[dependencies.taleofkingdoms]]
+modId = "fabric_api"
+type = "required"
+versionRange = "[0.115.6,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.taleofkingdoms]]
+modId = "cloth_config"
+type = "required"
+versionRange = "[15.0.140,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.taleofkingdoms]]
+modId = "owo"
+type = "required"
+versionRange = "[0.12.15,)"
+ordering = "NONE"
+side = "BOTH"
+
 [[mixins]]
 config = "taleofkingdoms.mixins.json"
+
+[[mixins]]
+config = "taleofkingdoms.client.mixins.json"
