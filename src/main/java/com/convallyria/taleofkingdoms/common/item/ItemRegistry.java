@@ -23,14 +23,7 @@ public class ItemRegistry extends Listener {
 
     public static final Map<TOKItem, Item> ITEMS = new HashMap<>();
     public static final RegistryKey<ItemGroup> TOK_ITEM_GROUP = RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(TaleOfKingdoms.MODID, "general"));
-    public static final ItemGroup GENERAL_ITEM_GROUP = FabricItemGroup.builder()
-            .icon(() -> new ItemStack(ITEMS.get(TOKItem.COIN)))
-            .displayName(Text.translatable("taleofkingdoms.group.general"))
-            .entries((context, entries) -> {
-                entries.add(ITEMS.get(TOKItem.COIN));
-                entries.add(ITEMS.get(TOKItem.POUCH));
-            })
-            .build();
+    public static ItemGroup GENERAL_ITEM_GROUP;
 
     public enum TOKItem {
         COIN("coin"),
@@ -47,18 +40,16 @@ public class ItemRegistry extends Listener {
         }
     }
 
-    public static void init() {
-        ITEMS.put(TOKItem.COIN, new ItemCoin(new Item.Settings()
-                .maxCount(16)
-                .rarity(Rarity.COMMON)
-                .fireproof()));
-        ITEMS.put(TOKItem.POUCH, new ItemPouch(new Item.Settings()
-                .maxCount(1)
-                .rarity(Rarity.COMMON)));
-    }
-
     public static void register(RegisterEvent event) {
         event.register(Registries.ITEM.getKey(), helper -> {
+            ITEMS.put(TOKItem.COIN, new ItemCoin(new Item.Settings()
+                    .maxCount(16)
+                    .rarity(Rarity.COMMON)
+                    .fireproof()));
+            ITEMS.put(TOKItem.POUCH, new ItemPouch(new Item.Settings()
+                    .maxCount(1)
+                    .rarity(Rarity.COMMON)));
+
             TaleOfKingdoms.LOGGER.info("Loading items...");
             int index = 1;
             for (TOKItem item : TOKItem.values()) {
@@ -67,6 +58,16 @@ public class ItemRegistry extends Listener {
                 index++;
             }
         });
-        event.register(Registries.ITEM_GROUP.getKey(), helper -> helper.register(TOK_ITEM_GROUP, GENERAL_ITEM_GROUP));
+        event.register(Registries.ITEM_GROUP.getKey(), helper -> {
+            GENERAL_ITEM_GROUP = FabricItemGroup.builder()
+                    .icon(() -> new ItemStack(ITEMS.get(TOKItem.COIN)))
+                    .displayName(Text.translatable("taleofkingdoms.group.general"))
+                    .entries((context, entries) -> {
+                        entries.add(ITEMS.get(TOKItem.COIN));
+                        entries.add(ITEMS.get(TOKItem.POUCH));
+                    })
+                    .build();
+            helper.register(TOK_ITEM_GROUP, GENERAL_ITEM_GROUP);
+        });
     }
 }
