@@ -32,6 +32,7 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -59,7 +60,11 @@ public class TaleOfKingdomsClient implements ClientModInitializer {
 
     public TaleOfKingdomsClient(IEventBus modBus) {
         modBus.addListener(this::registerScreens);
-        onInitializeClient();
+        modBus.addListener(this::clientSetup);
+    }
+
+    private void clientSetup(FMLClientSetupEvent event) {
+        event.enqueueWork(this::onInitializeClient);
     }
 
     private void registerScreens(RegisterMenuScreensEvent event) {
