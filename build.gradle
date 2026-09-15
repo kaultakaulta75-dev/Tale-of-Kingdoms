@@ -36,16 +36,6 @@ sourceSets {
         }
     }
 }
-
-loom {
-    // owo supplies its injected interfaces at runtime through mixins. Applying
-    // dependency interface injection to Minecraft's dev jar makes ModLauncher
-    // resolve OwoItem before the owo module is visible on NeoForge.
-    interfaceInjection {
-        enableDependencyInterfaceInjection = false
-    }
-}
-
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.9.0'
     testImplementation 'com.google.code.gson:gson:2.10'
