@@ -2,33 +2,30 @@ package com.convallyria.taleofkingdoms.managers;
 
 import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.util.Identifier;
+import net.neoforged.neoforge.registries.RegisterEvent;
 
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.Map;
 
 public class SoundManager implements IManager {
 
-    private final Map<TOKSound, SoundEvent> events = new HashMap<>();
+    private static final Map<TOKSound, SoundEvent> EVENTS = new EnumMap<>(TOKSound.class);
+
+    static {
+        for (TOKSound sound : TOKSound.values()) {
+            Identifier identifier = Identifier.of(TaleOfKingdoms.MODID, sound.getPath());
+            EVENTS.put(sound, SoundEvent.of(identifier));
+        }
+    }
 
     public SoundManager(TaleOfKingdoms tok) {
         TaleOfKingdoms.LOGGER.info("Loading sounds...");
-        for (TOKSound value : TOKSound.values()) {
-            addSound(value);
-        }
-        register();
-    }
-
-    private void addSound(TOKSound sound) {
-        Identifier identifier = Identifier.of(TaleOfKingdoms.MODID, sound.getPath());
-        TaleOfKingdoms.LOGGER.info("Loading sound: {}", sound.getPath());
-        events.put(sound, SoundEvent.of(identifier));
     }
 
     public SoundEvent getSound(TOKSound sound) {
-        return events.get(sound);
+        return EVENTS.get(sound);
     }
 
     @Override
@@ -36,11 +33,11 @@ public class SoundManager implements IManager {
         return "Sound Manager";
     }
 
-    private void register() {
-        events.forEach((name, event) -> {
-            Identifier identifier = Identifier.of(TaleOfKingdoms.MODID, name.getPath());
-            Registry.register(Registries.SOUND_EVENT, identifier, event);
-        });
+    public static void register(RegisterEvent event) {
+        event.register(Registries.SOUND_EVENT.getKey(), helper -> EVENTS.forEach((name, sound) -> {
+            TaleOfKingdoms.LOGGER.info("Loading sound: {}", name.getPath());
+            helper.register(Identifier.of(TaleOfKingdoms.MODID, name.getPath()), sound);
+        }));
     }
 
     public enum TOKSound {
