@@ -134,8 +134,6 @@ public class TaleOfKingdoms implements ModInitializer {
     @Override
     public void onInitialize() {
         instance = this;
-        ItemRegistry.init();
-
         File file = new File(this.getDataFolder() + "worlds");
         if (!file.exists()) file.mkdirs();
 
