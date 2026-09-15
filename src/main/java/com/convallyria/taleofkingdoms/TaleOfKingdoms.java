@@ -65,8 +65,8 @@ import me.shedaniel.autoconfig.serializer.Toml4jConfigSerializer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
-import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.registries.RegisterEvent;
 import net.minecraft.block.Block;
@@ -128,6 +128,7 @@ public class TaleOfKingdoms implements ModInitializer {
 
     public TaleOfKingdoms(IEventBus modBus) {
         modBus.addListener(this::registerContent);
+        modBus.addListener(this::registerEntityAttributes);
         onInitialize();
     }
 
@@ -162,42 +163,10 @@ public class TaleOfKingdoms implements ModInitializer {
         registerEvents();
         registerCommands();
 
-        FabricDefaultAttributeRegistry.register(EntityTypes.INNKEEPER, InnkeeperEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.FARMER, FarmerEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.GUILDMASTER, GuildMasterEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.GUILDMASTER_DEFENDER, GuildMasterDefenderEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.BLACKSMITH, BlacksmithEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.CITYBUILDER, CityBuilderEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.KNIGHT, KnightEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.HUNTER, HunterEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.GUILDGUARD, GuildGuardEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.GUILDVILLAGER, GuildVillagerEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.GUILDARCHER, GuildArcherEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.BANKER, BankerEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.LONE, LoneEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.FOODSHOP, FoodShopEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.GUILDCAPTAIN, GuildCaptainEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.LONEVILLAGER, LoneVillagerEntity.createMobAttributes());
 
-        FabricDefaultAttributeRegistry.register(EntityTypes.REFICULE_SOLDIER, ReficuleSoldierEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.REFICULE_GUARDIAN, ReficuleGuardianEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.REFICULE_MAGE, ReficuleMageEntity.createMobAttributes());
 
-        FabricDefaultAttributeRegistry.register(EntityTypes.BANDIT, BanditEntity.createMobAttributes());
 
         // Player's kingdom entities
-        FabricDefaultAttributeRegistry.register(EntityTypes.ITEM_SHOP, ItemShopEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.KINGDOM_VILLAGER, KingdomVillagerEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.STOCK_MARKET, StockMarketEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.QUARRY_FOREMAN, QuarryForemanEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.LUMBER_FOREMAN, LumberForemanEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.QUARRY_WORKER, QuarryWorkerEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.LUMBER_WORKER, LumberWorkerEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.WARDEN, WardenEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.WARRIOR, WarriorHireableEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.ARCHER, ArcherHireableEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.BLOCK_SHOP, BlockShopEntity.createMobAttributes());
-        FabricDefaultAttributeRegistry.register(EntityTypes.HUMAN_FARMER, HumanFarmerEntity.createVillagerAttributes());
 
         // Load shop items
         new ShopParser().createShopItems();
@@ -226,6 +195,41 @@ public class TaleOfKingdoms implements ModInitializer {
      */
     public static TaleOfKingdomsAPI getAPI() {
         return api;
+    }
+
+    private void registerEntityAttributes(EntityAttributeCreationEvent event) {
+        event.put(EntityTypes.INNKEEPER, InnkeeperEntity.createMobAttributes().build());
+        event.put(EntityTypes.FARMER, FarmerEntity.createMobAttributes().build());
+        event.put(EntityTypes.GUILDMASTER, GuildMasterEntity.createMobAttributes().build());
+        event.put(EntityTypes.GUILDMASTER_DEFENDER, GuildMasterDefenderEntity.createMobAttributes().build());
+        event.put(EntityTypes.BLACKSMITH, BlacksmithEntity.createMobAttributes().build());
+        event.put(EntityTypes.CITYBUILDER, CityBuilderEntity.createMobAttributes().build());
+        event.put(EntityTypes.KNIGHT, KnightEntity.createMobAttributes().build());
+        event.put(EntityTypes.HUNTER, HunterEntity.createMobAttributes().build());
+        event.put(EntityTypes.GUILDGUARD, GuildGuardEntity.createMobAttributes().build());
+        event.put(EntityTypes.GUILDVILLAGER, GuildVillagerEntity.createMobAttributes().build());
+        event.put(EntityTypes.GUILDARCHER, GuildArcherEntity.createMobAttributes().build());
+        event.put(EntityTypes.BANKER, BankerEntity.createMobAttributes().build());
+        event.put(EntityTypes.LONE, LoneEntity.createMobAttributes().build());
+        event.put(EntityTypes.FOODSHOP, FoodShopEntity.createMobAttributes().build());
+        event.put(EntityTypes.GUILDCAPTAIN, GuildCaptainEntity.createMobAttributes().build());
+        event.put(EntityTypes.LONEVILLAGER, LoneVillagerEntity.createMobAttributes().build());
+        event.put(EntityTypes.REFICULE_SOLDIER, ReficuleSoldierEntity.createMobAttributes().build());
+        event.put(EntityTypes.REFICULE_GUARDIAN, ReficuleGuardianEntity.createMobAttributes().build());
+        event.put(EntityTypes.REFICULE_MAGE, ReficuleMageEntity.createMobAttributes().build());
+        event.put(EntityTypes.BANDIT, BanditEntity.createMobAttributes().build());
+        event.put(EntityTypes.ITEM_SHOP, ItemShopEntity.createMobAttributes().build());
+        event.put(EntityTypes.KINGDOM_VILLAGER, KingdomVillagerEntity.createMobAttributes().build());
+        event.put(EntityTypes.STOCK_MARKET, StockMarketEntity.createMobAttributes().build());
+        event.put(EntityTypes.QUARRY_FOREMAN, QuarryForemanEntity.createMobAttributes().build());
+        event.put(EntityTypes.LUMBER_FOREMAN, LumberForemanEntity.createMobAttributes().build());
+        event.put(EntityTypes.QUARRY_WORKER, QuarryWorkerEntity.createMobAttributes().build());
+        event.put(EntityTypes.LUMBER_WORKER, LumberWorkerEntity.createMobAttributes().build());
+        event.put(EntityTypes.WARDEN, WardenEntity.createMobAttributes().build());
+        event.put(EntityTypes.WARRIOR, WarriorHireableEntity.createMobAttributes().build());
+        event.put(EntityTypes.ARCHER, ArcherHireableEntity.createMobAttributes().build());
+        event.put(EntityTypes.BLOCK_SHOP, BlockShopEntity.createMobAttributes().build());
+        event.put(EntityTypes.HUMAN_FARMER, HumanFarmerEntity.createVillagerAttributes().build());
     }
 
     private void registerEvents() {
