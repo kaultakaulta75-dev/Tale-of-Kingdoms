@@ -68,6 +68,7 @@ import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityT
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.registries.RegisterEvent;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
@@ -129,7 +130,11 @@ public class TaleOfKingdoms implements ModInitializer {
     public TaleOfKingdoms(IEventBus modBus) {
         modBus.addListener(this::registerContent);
         modBus.addListener(this::registerEntityAttributes);
-        onInitialize();
+        modBus.addListener(this::commonSetup);
+    }
+
+    private void commonSetup(FMLCommonSetupEvent event) {
+        event.enqueueWork(this::onInitialize);
     }
 
     @Override
