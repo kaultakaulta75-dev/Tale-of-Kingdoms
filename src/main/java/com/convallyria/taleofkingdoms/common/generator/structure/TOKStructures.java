@@ -1,14 +1,10 @@
 package com.convallyria.taleofkingdoms.common.generator.structure;
 
-import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.common.generator.BanditCampGenerator;
 import com.convallyria.taleofkingdoms.common.generator.GatewayGenerator;
 import com.convallyria.taleofkingdoms.common.generator.ReficuleVillageGenerator;
 import com.convallyria.taleofkingdoms.common.generator.biome.TOKBiomeTags;
 import com.convallyria.taleofkingdoms.common.generator.util.StructureConfigCreator;
-import com.convallyria.taleofkingdoms.mixin.StructureTypeAccessor;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.MapCodec;
 import net.minecraft.registry.Registerable;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.structure.StructurePieceType;
@@ -19,13 +15,13 @@ import net.minecraft.world.gen.structure.StructureType;
 public class TOKStructures {
 
      public static final StructurePieceType REFICULE_VILLAGE = ReficuleVillageGenerator.ReficuleVillagePiece::new;
-     public static final StructureType<?> REFICULE_VILLAGE_TYPE = registerType("reficule_village", ReficuleVillageStructure.CODEC);
+     public static final StructureType<ReficuleVillageStructure> REFICULE_VILLAGE_TYPE = () -> ReficuleVillageStructure.CODEC;
 
      public static final StructurePieceType GATEWAY = GatewayGenerator.GatewayPiece::new;
-     public static final StructureType<?> GATEWAY_TYPE = registerType("gateway", GatewayStructure.CODEC);
+     public static final StructureType<GatewayStructure> GATEWAY_TYPE = () -> GatewayStructure.CODEC;
 
      public static final StructurePieceType BANDIT_CAMP = BanditCampGenerator.BanditCampPiece::new;
-     public static final StructureType<?> BANDIT_CAMP_TYPE = registerType("bandit_camp", BanditCampStructure.CODEC);
+     public static final StructureType<BanditCampStructure> BANDIT_CAMP_TYPE = () -> BanditCampStructure.CODEC;
 
      // This doesn't work. We use json files by default for now.
 //     public static void registerStructureSets(Registerable<StructureSet> structureSetRegisterable) {
@@ -62,10 +58,6 @@ public class TOKStructures {
                   .biome(TOKBiomeTags.NO_MOUNTAINS_DESERTS)
                   .terrainAdaptation(StructureTerrainAdaptation.BEARD_BOX)
                   .build(structureRegisterable)));
-     }
-
-     private static StructureType<? extends Structure> registerType(String name, MapCodec<? extends Structure> structure) {
-          return StructureTypeAccessor.callRegister(TaleOfKingdoms.MODID + ":" + name, structure);
      }
 
      private static void registerStructure(Registerable<Structure> structureRegisterable, RegistryKey<Structure> registryKey, Structure structure) {
