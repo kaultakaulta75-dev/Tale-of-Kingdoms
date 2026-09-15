@@ -45,13 +45,6 @@ versionRange = "[15.0.140,)"
 ordering = "NONE"
 side = "BOTH"
 
-[[dependencies.taleofkingdoms]]
-modId = "owo"
-type = "required"
-versionRange = "[0.12.15,)"
-ordering = "NONE"
-side = "BOTH"
-
 [[mixins]]
 config = "taleofkingdoms.mixins.json"
 
