@@ -38,6 +38,29 @@ jobs:
       - name: Build
         run: ./gradlew build --stacktrace
 
+      - name: Smoke-test dedicated server startup
+        shell: bash
+        run: |
+          mkdir -p run
+          echo "eula=true" > run/eula.txt
+          set +e
+          timeout 120s ./gradlew runServer --args "--nogui" > server-smoke.log 2>&1
+          status=$?
+          set -e
+          cat server-smoke.log
+          if grep -q "Done (" server-smoke.log; then
+            exit 0
+          fi
+          exit "${status}"
+
+      - name: Upload server smoke-test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tale-of-kingdoms-server-smoke-log
+          path: server-smoke.log
+          if-no-files-found: ignore
+
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
