@@ -84,7 +84,8 @@ jobs:
           if grep -q "Done (" server-smoke.log; then
             exit 0
           fi
-          exit "${status}"
+          echo "Server did not reach the ready state (process status: ${status})" >&2
+          exit 1
 
       - name: Upload server smoke-test log
         if: always()
