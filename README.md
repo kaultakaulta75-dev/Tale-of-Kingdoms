@@ -14,14 +14,12 @@
     <a href="/issues/new">Report Bug or Feature Request</a>
   </p>
 
-![Build](https://img.shields.io/github/actions/workflow/status/SamB440/Tale-of-Kingdoms/build.yml?branch=master)
-![Forks](https://img.shields.io/github/forks/SamB440/Tale-of-Kingdoms) 
-![Stargazers](https://img.shields.io/github/stars/SamB440/Tale-of-Kingdoms) 
-![Issues](https://img.shields.io/github/issues/SamB440/Tale-of-Kingdoms) 
-![License](https://img.shields.io/github/license/SamB440/Tale-of-Kingdoms)
+![Build](https://img.shields.io/github/actions/workflow/status/kaultakaulta75-dev/Tale-of-Kingdoms/build.yml?branch=port%2Fneoforge-1.21.1)
+![Issues](https://img.shields.io/github/issues/kaultakaulta75-dev/Tale-of-Kingdoms)
+![License](https://img.shields.io/github/license/kaultakaulta75-dev/Tale-of-Kingdoms)
 [![Crowdin](https://badges.crowdin.net/tale-of-kingdoms/localized.svg)](https://crowdin.com/project/tale-of-kingdoms)
 
-**Requires [Connector](https://modrinth.com/mod/connector) and [FFAPI](https://modrinth.com/mod/forgified-fabric-api) on NeoForge.**
+**Experimental NeoForge 1.21.1 port. Connector is not required.**
 </div>
 
 ## Table Of Contents
@@ -54,50 +52,27 @@ Please note that this mod is a complete recode unlike previous Tale of Kingdoms 
 
 ## Getting Started
 
-Tale of Kingdoms builds on JDK 21 and uses Gradle to manage dependencies.
+This branch targets Minecraft 1.21.1 with NeoForge 21.1.226 and Java 21.
 
 ### Prerequisites
 
-You just need Java 21. If you don't have it:
+Install Minecraft 1.21.1 with NeoForge 21.1.226 or newer, then download these
+NeoForge dependencies:
 
-Latest from https://adoptium.net, or;
-```sh
-sudo apt install adoptopenjdk-21-hotspot
-```
+* [Forgified Fabric API](https://modrinth.com/mod/forgified-fabric-api) 0.115.6+2.1.0+1.21.1
+* [Cloth Config API](https://modrinth.com/mod/cloth-config) 15.0.140
+* [owo-lib](https://modrinth.com/mod/owo-lib) 0.12.15.1-beta.6+1.21
 
 ### Installation
 
-1. Clone the repo
+1. Install NeoForge for Minecraft 1.21.1.
+2. Put Tale of Kingdoms and the three dependencies above in `.minecraft/mods`.
+3. Start the NeoForge 1.21.1 profile.
 
-```sh
-git clone https://github.com/SamB440/Tale-of-Kingdoms.git
-```
+Connector and Fabric Loader must not be installed for this port.
 
-2. cd into project
-
-```sh
-cd tale-of-kingdoms
-```
-
-3. Run gradle build
-
-```sh
-./gradlew build
-```
-
-4. Get your jar file
-
-Jar file is in `build/libs/tale-of-kingdoms-{VERSION}.jar`.
-
-5. Install Fabric
-
-Get it from https://fabricmc.net/use/
-
-6. Install jar file to the mods folder
-
-Put the tale of kingdoms jar file in your `.minecraft/mods` folder.
-
-7. Run Minecraft!
+To build from source, install Java 21 and run `./gradlew build`. The JAR is
+created in `build/libs`.
 
 ### Developing
 
