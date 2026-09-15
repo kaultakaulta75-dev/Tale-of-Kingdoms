@@ -65,6 +65,8 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.BlockEntityType;
@@ -85,6 +87,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
 
+@Mod(TaleOfKingdoms.MODID)
 public class TaleOfKingdoms implements ModInitializer {
 
     public static final String MODID = "taleofkingdoms";
@@ -133,6 +136,10 @@ public class TaleOfKingdoms implements ModInitializer {
 
     public static TaleOfKingdoms getInstance() {
         return instance;
+    }
+
+    public TaleOfKingdoms(IEventBus modBus) {
+        onInitialize();
     }
 
     @Override

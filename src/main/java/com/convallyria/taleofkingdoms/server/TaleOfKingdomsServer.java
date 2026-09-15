@@ -20,14 +20,22 @@ import com.convallyria.taleofkingdoms.server.packet.outgoing.OutgoingOpenScreenP
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.api.EnvType;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
 import net.minecraft.server.network.ServerPlayerEntity;
 
+@Mod(value = TaleOfKingdoms.MODID, dist = Dist.DEDICATED_SERVER)
 public class TaleOfKingdomsServer implements DedicatedServerModInitializer {
 
     private static TaleOfKingdomsServerAPI api;
 
     public static TaleOfKingdomsServerAPI getAPI() {
         return api;
+    }
+
+    public TaleOfKingdomsServer(IEventBus modBus) {
+        onInitializeServer();
     }
 
     @Override
