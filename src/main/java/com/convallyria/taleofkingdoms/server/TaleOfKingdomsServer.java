@@ -23,6 +23,7 @@ import net.fabricmc.api.EnvType;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 @Mod(value = TaleOfKingdoms.MODID, dist = Dist.DEDICATED_SERVER)
@@ -35,7 +36,11 @@ public class TaleOfKingdomsServer implements DedicatedServerModInitializer {
     }
 
     public TaleOfKingdomsServer(IEventBus modBus) {
-        onInitializeServer();
+        modBus.addListener(this::serverSetup);
+    }
+
+    private void serverSetup(FMLDedicatedServerSetupEvent event) {
+        event.enqueueWork(this::onInitializeServer);
     }
 
     @Override
