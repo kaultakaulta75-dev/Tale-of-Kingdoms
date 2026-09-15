@@ -38,13 +38,46 @@ jobs:
       - name: Build
         run: ./gradlew build --stacktrace
 
-      - name: Smoke-test dedicated server startup
+      - name: Prepare production NeoForge server
         shell: bash
         run: |
-          mkdir -p run
-          echo "eula=true" > run/eula.txt
+          mkdir -p production-server/mods
+          curl --fail --location --output neoforge-installer.jar \
+            https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.226/neoforge-21.1.226-installer.jar
+          (
+            cd production-server
+            java -jar ../neoforge-installer.jar --installServer
+          )
+
+          find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources.jar' \
+            -exec cp {} production-server/mods/ \;
+
+          copy_dependency() {
+            local pattern="$1"
+            local dependency
+            dependency="$(find "${GRADLE_USER_HOME}/caches/modules-2/files-2.1" -type f \
+              -name "${pattern}" ! -name '*sources*' ! -name '*dev*' | head -n 1)"
+            if [[ -z "${dependency}" ]]; then
+              echo "Dependency not found: ${pattern}" >&2
+              exit 1
+            fi
+            cp "${dependency}" production-server/mods/
+          }
+
+          copy_dependency 'forgified-fabric-api-0.115.6+2.1.0+1.21.1.jar'
+          copy_dependency 'cloth-config-neoforge-15.0.140-neoforge.jar'
+          copy_dependency 'owo-lib-neoforge-0.12.15.1-beta.6+1.21.jar'
+          echo 'eula=true' > production-server/eula.txt
+          ls -lh production-server/mods
+
+      - name: Smoke-test production dedicated server startup
+        shell: bash
+        run: |
           set +e
-          timeout 120s ./gradlew runServer --args=--nogui > server-smoke.log 2>&1
+          (
+            cd production-server
+            timeout 180s ./run.sh nogui
+          ) > server-smoke.log 2>&1
           status=$?
           set -e
           cat server-smoke.log
