@@ -52,6 +52,7 @@ import com.convallyria.taleofkingdoms.common.serialization.gson.ConquestInstance
 import com.convallyria.taleofkingdoms.common.shop.SellScreenHandler;
 import com.convallyria.taleofkingdoms.common.shop.ShopParser;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
+import com.convallyria.taleofkingdoms.managers.SoundManager;
 import com.google.common.io.Files;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -67,12 +68,12 @@ import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityT
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.registries.RegisterEvent;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.command.argument.TextArgumentType;
 import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.resource.featuretoggle.FeatureFlags;
 import net.minecraft.screen.ScreenHandlerType;
@@ -103,29 +104,17 @@ public class TaleOfKingdoms implements ModInitializer {
 
     public static final Locale DEFAULT_LOCALE = Locale.ENGLISH;
 
-    public static final StructureProcessorType<?> GUILD_PROCESSOR = StructureProcessorType.register("taleofkingdoms:guild", GuildStructureProcessor.CODEC);
-    public static final StructureProcessorType<?> GATEWAY_PROCESSOR = StructureProcessorType.register("taleofkingdoms:gateway", GatewayStructureProcessor.CODEC);
-    public static final StructureProcessorType<?> KINGDOM_PROCESSOR = StructureProcessorType.register("taleofkingdoms:kingdom", PlayerKingdomStructureProcessor.CODEC);
+    public static final StructureProcessorType<GuildStructureProcessor> GUILD_PROCESSOR = () -> GuildStructureProcessor.CODEC;
+    public static final StructureProcessorType<GatewayStructureProcessor> GATEWAY_PROCESSOR = () -> GatewayStructureProcessor.CODEC;
+    public static final StructureProcessorType<PlayerKingdomStructureProcessor> KINGDOM_PROCESSOR = () -> PlayerKingdomStructureProcessor.CODEC;
 
-    public static final ScreenHandlerType<SellScreenHandler> SELL_SCREEN_HANDLER;
-
-    public static final Block SELL_BLOCK;
-    public static final BlockEntityType<SellBlockEntity> SELL_BLOCK_ENTITY;
-
-    // a public identifier for multiple parts of our bigger chest
+    // A public identifier for multiple parts of our bigger chest
     public static final Identifier SELL_BLOCK_IDENTIFIER = Identifier.of(MODID, "sell_block");
-
-    static {
-        //We use registerSimple here because our Entity is not an ExtendedScreenHandlerFactory
-        //but a NamedScreenHandlerFactory.
-        //In a later Tutorial you will see what ExtendedScreenHandlerFactory can do!
-        SELL_SCREEN_HANDLER = Registry.register(Registries.SCREEN_HANDLER, Identifier.of(TaleOfKingdoms.MODID, "sell_screen_handler"), new ScreenHandlerType<>(SellScreenHandler::new, FeatureFlags.VANILLA_FEATURES));
-
-        SELL_BLOCK = Registry.register(Registries.BLOCK, SELL_BLOCK_IDENTIFIER, new SellBlock(FabricBlockSettings.copyOf(Blocks.CHEST)));
-
-        //The parameter of build at the very end is always null, do not worry about it
-        SELL_BLOCK_ENTITY = Registry.register(Registries.BLOCK_ENTITY_TYPE, SELL_BLOCK_IDENTIFIER, FabricBlockEntityTypeBuilder.create(SellBlockEntity::new, SELL_BLOCK).build(null));
-    }
+    public static final ScreenHandlerType<SellScreenHandler> SELL_SCREEN_HANDLER =
+            new ScreenHandlerType<>(SellScreenHandler::new, FeatureFlags.VANILLA_FEATURES);
+    public static final Block SELL_BLOCK = new SellBlock(FabricBlockSettings.copyOf(Blocks.CHEST));
+    public static final BlockEntityType<SellBlockEntity> SELL_BLOCK_ENTITY =
+            FabricBlockEntityTypeBuilder.create(SellBlockEntity::new, SELL_BLOCK).build(null);
 
     public static void setAPI(TaleOfKingdomsAPI api) {
         if (TaleOfKingdoms.api != null) {
@@ -139,6 +128,7 @@ public class TaleOfKingdoms implements ModInitializer {
     }
 
     public TaleOfKingdoms(IEventBus modBus) {
+        modBus.addListener(this::registerContent);
         onInitialize();
     }
 
@@ -174,7 +164,6 @@ public class TaleOfKingdoms implements ModInitializer {
 
         registerEvents();
         registerCommands();
-        registerFeatures();
 
         FabricDefaultAttributeRegistry.register(EntityTypes.INNKEEPER, InnkeeperEntity.createMobAttributes());
         FabricDefaultAttributeRegistry.register(EntityTypes.FARMER, FarmerEntity.createMobAttributes());
@@ -257,10 +246,29 @@ public class TaleOfKingdoms implements ModInitializer {
         new TaleOfKingdomsCommands();
     }
 
-    public void registerFeatures() {
-        Registry.register(Registries.STRUCTURE_PIECE, Identifier.of(MODID, "bandit_camp_piece"), TOKStructures.BANDIT_CAMP);
-        Registry.register(Registries.STRUCTURE_PIECE, Identifier.of(MODID, "gateway_piece"), TOKStructures.GATEWAY);
-        Registry.register(Registries.STRUCTURE_PIECE, Identifier.of(MODID, "reficule_village_piece"), TOKStructures.REFICULE_VILLAGE);
+    private void registerContent(RegisterEvent event) {
+        event.register(Registries.STRUCTURE_PROCESSOR.getKey(), helper -> {
+            helper.register(Identifier.of(MODID, "guild"), GUILD_PROCESSOR);
+            helper.register(Identifier.of(MODID, "gateway"), GATEWAY_PROCESSOR);
+            helper.register(Identifier.of(MODID, "kingdom"), KINGDOM_PROCESSOR);
+        });
+        event.register(Registries.SCREEN_HANDLER.getKey(),
+                Identifier.of(MODID, "sell_screen_handler"), () -> SELL_SCREEN_HANDLER);
+        event.register(Registries.BLOCK.getKey(), SELL_BLOCK_IDENTIFIER, () -> SELL_BLOCK);
+        event.register(Registries.BLOCK_ENTITY_TYPE.getKey(), SELL_BLOCK_IDENTIFIER, () -> SELL_BLOCK_ENTITY);
+        event.register(Registries.STRUCTURE_PIECE.getKey(), helper -> {
+            helper.register(Identifier.of(MODID, "bandit_camp_piece"), TOKStructures.BANDIT_CAMP);
+            helper.register(Identifier.of(MODID, "gateway_piece"), TOKStructures.GATEWAY);
+            helper.register(Identifier.of(MODID, "reficule_village_piece"), TOKStructures.REFICULE_VILLAGE);
+        });
+        event.register(Registries.STRUCTURE_TYPE.getKey(), helper -> {
+            helper.register(Identifier.of(MODID, "bandit_camp"), TOKStructures.BANDIT_CAMP_TYPE);
+            helper.register(Identifier.of(MODID, "gateway"), TOKStructures.GATEWAY_TYPE);
+            helper.register(Identifier.of(MODID, "reficule_village"), TOKStructures.REFICULE_VILLAGE_TYPE);
+        });
+        EntityTypes.register(event);
+        ItemRegistry.register(event);
+        SoundManager.register(event);
     }
 
     public static Text parse(StringReader stringReader, RegistryWrapper.WrapperLookup registries) throws CommandSyntaxException {
