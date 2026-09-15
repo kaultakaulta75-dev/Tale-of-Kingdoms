@@ -44,7 +44,7 @@ jobs:
           mkdir -p run
           echo "eula=true" > run/eula.txt
           set +e
-          timeout 120s ./gradlew runServer --args "--nogui" > server-smoke.log 2>&1
+          timeout 120s ./gradlew runServer --args=--nogui > server-smoke.log 2>&1
           status=$?
           set -e
           cat server-smoke.log
