@@ -66,7 +66,7 @@ jobs:
 
           copy_dependency 'forgified-fabric-api-0.116.15+2.3.5+1.21.1.jar'
           copy_dependency 'cloth-config-neoforge-15.0.140-neoforge.jar'
-          copy_dependency 'owo-lib-neoforge-0.12.15.1-beta.6+1.21.jar'
+          copy_dependency 'owo-lib-neoforge-0.12.15.5-beta.1+1.21.jar'
           echo 'eula=true' > production-server/eula.txt
           ls -lh production-server/mods
 
@@ -94,6 +94,15 @@ jobs:
           name: tale-of-kingdoms-server-smoke-log
           path: server-smoke.log
           if-no-files-found: ignore
+
+      - name: Upload complete client mod pack
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tale-of-kingdoms-neoforge-1.21.1-complete-mods
+          path: production-server/mods/*.jar
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Upload build artifacts
         if: always()

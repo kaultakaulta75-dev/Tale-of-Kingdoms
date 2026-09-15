@@ -61,7 +61,7 @@ NeoForge dependencies:
 
 * [Forgified Fabric API](https://modrinth.com/mod/forgified-fabric-api) 0.116.15+2.3.5+1.21.1
 * [Cloth Config API](https://modrinth.com/mod/cloth-config) 15.0.140
-* [owo-lib](https://modrinth.com/mod/owo-lib) 0.12.15.1-beta.6+1.21
+* [owo-lib](https://modrinth.com/mod/owo-lib) 0.12.15.5-beta.1+1.21
 
 ### Installation
 
@@ -70,6 +70,13 @@ NeoForge dependencies:
 3. Start the NeoForge 1.21.1 profile.
 
 Connector and Fabric Loader must not be installed for this port.
+
+### Complete pack from GitHub
+
+Every successful [GitHub Actions build](https://github.com/kaultakaulta75-dev/Tale-of-Kingdoms/actions/workflows/build.yml)
+uploads an artifact named `tale-of-kingdoms-neoforge-1.21.1-complete-mods`.
+It contains the Tale of Kingdoms JAR and all three required dependency JARs.
+Extract the artifact, then copy all four JARs into the instance's `mods` folder.
 
 To build from source, install Java 21 and run `./gradlew build`. The JAR is
 created in `build/libs`.
