@@ -112,9 +112,8 @@ public class TaleOfKingdoms implements ModInitializer {
     public static final Identifier SELL_BLOCK_IDENTIFIER = Identifier.of(MODID, "sell_block");
     public static final ScreenHandlerType<SellScreenHandler> SELL_SCREEN_HANDLER =
             new ScreenHandlerType<>(SellScreenHandler::new, FeatureFlags.VANILLA_FEATURES);
-    public static final Block SELL_BLOCK = new SellBlock(FabricBlockSettings.copyOf(Blocks.CHEST));
-    public static final BlockEntityType<SellBlockEntity> SELL_BLOCK_ENTITY =
-            FabricBlockEntityTypeBuilder.create(SellBlockEntity::new, SELL_BLOCK).build(null);
+    public static Block SELL_BLOCK;
+    public static BlockEntityType<SellBlockEntity> SELL_BLOCK_ENTITY;
 
     public static void setAPI(TaleOfKingdomsAPI api) {
         if (TaleOfKingdoms.api != null) {
@@ -254,8 +253,14 @@ public class TaleOfKingdoms implements ModInitializer {
         });
         event.register(Registries.SCREEN_HANDLER.getKey(),
                 Identifier.of(MODID, "sell_screen_handler"), () -> SELL_SCREEN_HANDLER);
-        event.register(Registries.BLOCK.getKey(), SELL_BLOCK_IDENTIFIER, () -> SELL_BLOCK);
-        event.register(Registries.BLOCK_ENTITY_TYPE.getKey(), SELL_BLOCK_IDENTIFIER, () -> SELL_BLOCK_ENTITY);
+        event.register(Registries.BLOCK.getKey(), helper -> {
+            SELL_BLOCK = new SellBlock(FabricBlockSettings.copyOf(Blocks.CHEST));
+            helper.register(SELL_BLOCK_IDENTIFIER, SELL_BLOCK);
+        });
+        event.register(Registries.BLOCK_ENTITY_TYPE.getKey(), helper -> {
+            SELL_BLOCK_ENTITY = FabricBlockEntityTypeBuilder.create(SellBlockEntity::new, SELL_BLOCK).build(null);
+            helper.register(SELL_BLOCK_IDENTIFIER, SELL_BLOCK_ENTITY);
+        });
         event.register(Registries.STRUCTURE_PIECE.getKey(), helper -> {
             helper.register(Identifier.of(MODID, "bandit_camp_piece"), TOKStructures.BANDIT_CAMP);
             helper.register(Identifier.of(MODID, "gateway_piece"), TOKStructures.GATEWAY);
