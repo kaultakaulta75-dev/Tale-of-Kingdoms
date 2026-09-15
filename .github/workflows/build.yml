@@ -43,7 +43,7 @@ jobs:
         run: |
           mkdir -p production-server/mods
           curl --fail --location --output neoforge-installer.jar \
-            https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.226/neoforge-21.1.226-installer.jar
+            https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.248/neoforge-21.1.248-installer.jar
           (
             cd production-server
             java -jar ../neoforge-installer.jar --installServer
@@ -64,7 +64,7 @@ jobs:
             cp "${dependency}" production-server/mods/
           }
 
-          copy_dependency 'forgified-fabric-api-0.115.6+2.1.0+1.21.1.jar'
+          copy_dependency 'forgified-fabric-api-0.116.15+2.3.5+1.21.1.jar'
           copy_dependency 'cloth-config-neoforge-15.0.140-neoforge.jar'
           copy_dependency 'owo-lib-neoforge-0.12.15.1-beta.6+1.21.jar'
           echo 'eula=true' > production-server/eula.txt

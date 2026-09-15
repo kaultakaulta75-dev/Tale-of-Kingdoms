@@ -52,14 +52,14 @@ Please note that this mod is a complete recode unlike previous Tale of Kingdoms 
 
 ## Getting Started
 
-This branch targets Minecraft 1.21.1 with NeoForge 21.1.226 and Java 21.
+This branch targets Minecraft 1.21.1 with NeoForge 21.1.248 and Java 21.
 
 ### Prerequisites
 
-Install Minecraft 1.21.1 with NeoForge 21.1.226 or newer, then download these
+Install Minecraft 1.21.1 with NeoForge 21.1.248 or newer, then download these
 NeoForge dependencies:
 
-* [Forgified Fabric API](https://modrinth.com/mod/forgified-fabric-api) 0.115.6+2.1.0+1.21.1
+* [Forgified Fabric API](https://modrinth.com/mod/forgified-fabric-api) 0.116.15+2.3.5+1.21.1
 * [Cloth Config API](https://modrinth.com/mod/cloth-config) 15.0.140
 * [owo-lib](https://modrinth.com/mod/owo-lib) 0.12.15.1-beta.6+1.21
 

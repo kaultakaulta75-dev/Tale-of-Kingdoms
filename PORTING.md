@@ -5,7 +5,7 @@ This branch contains the native NeoForge port of Tale of Kingdoms.
 ## Target
 
 - Minecraft 1.21.1
-- NeoForge 21.1.226
+- NeoForge 21.1.248
 - Java 21
 - Mod id: `taleofkingdoms`
 

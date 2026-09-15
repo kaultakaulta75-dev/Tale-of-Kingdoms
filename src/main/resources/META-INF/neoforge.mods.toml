@@ -20,7 +20,7 @@ logoFile = "assets/taleofkingdoms/logo.png"
 [[dependencies.taleofkingdoms]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.1.226,)"
+versionRange = "[21.1.248,)"
 ordering = "NONE"
 side = "BOTH"
 
@@ -34,7 +34,7 @@ side = "BOTH"
 [[dependencies.taleofkingdoms]]
 modId = "fabric_api"
 type = "required"
-versionRange = "[0.115.6,)"
+versionRange = "[0.116.15,)"
 ordering = "NONE"
 side = "BOTH"
 
