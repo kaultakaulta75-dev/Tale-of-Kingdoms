@@ -9,12 +9,12 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemGroup;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Rarity;
+import net.neoforged.neoforge.registries.RegisterEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,17 +23,14 @@ public class ItemRegistry extends Listener {
 
     public static final Map<TOKItem, Item> ITEMS = new HashMap<>();
     public static final RegistryKey<ItemGroup> TOK_ITEM_GROUP = RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(TaleOfKingdoms.MODID, "general"));
-
-    static {
-        Registry.register(Registries.ITEM_GROUP, TOK_ITEM_GROUP, FabricItemGroup.builder()
-                .icon(() -> new ItemStack(ITEMS.get(TOKItem.COIN)))
-                .displayName(Text.translatable("taleofkingdoms.group.general"))
-                .entries((context, entries) -> {
-                    entries.add(ITEMS.get(TOKItem.COIN));
-                    entries.add(ITEMS.get(TOKItem.POUCH));
-                })
-               .build()); // build() no longer registers by itself
-    }
+    public static final ItemGroup GENERAL_ITEM_GROUP = FabricItemGroup.builder()
+            .icon(() -> new ItemStack(ITEMS.get(TOKItem.COIN)))
+            .displayName(Text.translatable("taleofkingdoms.group.general"))
+            .entries((context, entries) -> {
+                entries.add(ITEMS.get(TOKItem.COIN));
+                entries.add(ITEMS.get(TOKItem.POUCH));
+            })
+            .build();
 
     public enum TOKItem {
         COIN("coin"),
@@ -58,16 +55,18 @@ public class ItemRegistry extends Listener {
         ITEMS.put(TOKItem.POUCH, new ItemPouch(new Item.Settings()
                 .maxCount(1)
                 .rarity(Rarity.COMMON)));
-        registerItems();
     }
 
-    public static void registerItems() {
-        TaleOfKingdoms.LOGGER.info("Loading items...");
-        int index = 1;
-        for (TOKItem item : ITEMS.keySet()) {
-            TaleOfKingdoms.LOGGER.info("[{}/{}] Loading item: {}", index, ITEMS.values().size(), item.getRegistryName());
-            Registry.register(Registries.ITEM, Identifier.of(TaleOfKingdoms.MODID, item.getRegistryName()), ITEMS.get(item));
-            index++;
-        }
+    public static void register(RegisterEvent event) {
+        event.register(Registries.ITEM.getKey(), helper -> {
+            TaleOfKingdoms.LOGGER.info("Loading items...");
+            int index = 1;
+            for (TOKItem item : TOKItem.values()) {
+                TaleOfKingdoms.LOGGER.info("[{}/{}] Loading item: {}", index, ITEMS.size(), item.getRegistryName());
+                helper.register(Identifier.of(TaleOfKingdoms.MODID, item.getRegistryName()), ITEMS.get(item));
+                index++;
+            }
+        });
+        event.register(Registries.ITEM_GROUP.getKey(), helper -> helper.register(TOK_ITEM_GROUP, GENERAL_ITEM_GROUP));
     }
 }
