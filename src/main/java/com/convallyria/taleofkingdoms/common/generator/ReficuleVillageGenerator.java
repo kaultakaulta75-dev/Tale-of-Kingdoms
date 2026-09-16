@@ -31,28 +31,37 @@ public class ReficuleVillageGenerator {
     private static final Identifier TOWER = Identifier.of(TaleOfKingdoms.MODID, "reficule_village/reficule_village_tower");
 
     public static void addPieces(StructureTemplateManager manager, BlockPos pos, BlockRotation blockRotation, StructurePiecesHolder structurePiecesHolder, Random random) {
-        ReficuleVillagePiece onePiece = new ReficuleVillagePiece(manager, ONE, pos.subtract(new Vec3i(0, 6, 0)), BlockRotation.NONE, 0);
+        ReficuleVillagePiece onePiece = new ReficuleVillagePiece(manager, ONE, pos.subtract(new Vec3i(0, 6, 0)), blockRotation, 0);
         structurePiecesHolder.addPiece(onePiece);
 
-        BlockPos middlePos = pos.add(new Vec3i(48, 0, 0));
-        ReficuleVillagePiece middlePiece = new ReficuleVillagePiece(manager, MIDDLE, middlePos, BlockRotation.NONE, 0);
+        BlockPos middlePos = offset(pos, 48, 0, blockRotation);
+        ReficuleVillagePiece middlePiece = new ReficuleVillagePiece(manager, MIDDLE, middlePos, blockRotation, 0);
         structurePiecesHolder.addPiece(middlePiece);
 
-        BlockPos threePos = middlePos.add(new Vec3i(32, 0, 0));
-        ReficuleVillagePiece threePiece = new ReficuleVillagePiece(manager, THREE, threePos, BlockRotation.NONE, 0);
+        BlockPos threePos = offset(pos, 80, 0, blockRotation);
+        ReficuleVillagePiece threePiece = new ReficuleVillagePiece(manager, THREE, threePos, blockRotation, 0);
         structurePiecesHolder.addPiece(threePiece);
 
-        BlockPos middleTwoPos = middlePos.subtract(new Vec3i(0, 0, 36));
-        ReficuleVillagePiece middleTwoPiece = new ReficuleVillagePiece(manager, MIDDLE_TWO, middleTwoPos, BlockRotation.NONE, 0);
+        BlockPos middleTwoPos = offset(pos, 48, -36, blockRotation);
+        ReficuleVillagePiece middleTwoPiece = new ReficuleVillagePiece(manager, MIDDLE_TWO, middleTwoPos, blockRotation, 0);
         structurePiecesHolder.addPiece(middleTwoPiece);
 
-        BlockPos fourPos = middleTwoPos.add(new Vec3i(0, 0, 13)).add(new Vec3i(32, 0, 0));
-        ReficuleVillagePiece fourPiece = new ReficuleVillagePiece(manager, FOUR, fourPos, BlockRotation.NONE, 0);
+        BlockPos fourPos = offset(pos, 80, -23, blockRotation);
+        ReficuleVillagePiece fourPiece = new ReficuleVillagePiece(manager, FOUR, fourPos, blockRotation, 0);
         structurePiecesHolder.addPiece(fourPiece);
 
-        BlockPos towerPos = pos.subtract(new Vec3i(0, 0, 32));
-        ReficuleVillagePiece towerPiece = new ReficuleVillagePiece(manager, TOWER, towerPos, BlockRotation.NONE, 0);
+        BlockPos towerPos = offset(pos, 0, -32, blockRotation);
+        ReficuleVillagePiece towerPiece = new ReficuleVillagePiece(manager, TOWER, towerPos, blockRotation, 0);
         structurePiecesHolder.addPiece(towerPiece);
+    }
+
+    private static BlockPos offset(BlockPos origin, int x, int z, BlockRotation rotation) {
+        return switch (rotation) {
+            case CLOCKWISE_90 -> origin.add(-z, 0, x);
+            case CLOCKWISE_180 -> origin.add(-x, 0, -z);
+            case COUNTERCLOCKWISE_90 -> origin.add(z, 0, -x);
+            default -> origin.add(x, 0, z);
+        };
     }
 
     public static class ReficuleVillagePiece extends SimpleStructurePiece {
@@ -78,7 +87,7 @@ public class ReficuleVillageGenerator {
 
         @Override
         protected void handleMetadata(String metadata, BlockPos pos, ServerWorldAccess world, net.minecraft.util.math.random.Random random, BlockBox boundingBox) {
-            double percent = Math.random() * 100;
+            int percent = random.nextInt(100);
             if (metadata.equals("Survivor")) {
                 if (percent > 20) {
                     EntityUtils.spawnEntity(EntityTypes.LONEVILLAGER, world, pos);

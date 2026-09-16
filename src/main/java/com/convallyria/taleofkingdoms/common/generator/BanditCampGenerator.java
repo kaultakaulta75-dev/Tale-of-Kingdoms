@@ -16,7 +16,6 @@ import net.minecraft.util.BlockRotation;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.ServerWorldAccess;
 import org.jetbrains.annotations.Nullable;
@@ -26,9 +25,7 @@ public class BanditCampGenerator {
     private static final Identifier SMALL_BANDIT_CAMP = Identifier.of(TaleOfKingdoms.MODID, "bandit_camp/small_bandit_camp");
 
     public static void addPieces(StructureTemplateManager manager, BlockPos pos, BlockRotation blockRotation, StructurePiecesHolder structurePiecesHolder, Random random) {
-        final Direction direction = Direction.random(random);
-        BanditCampPiece campPiece = new BanditCampPiece(manager, SMALL_BANDIT_CAMP, pos, BlockRotation.NONE, 0);
-        campPiece.setOrientation(direction);
+        BanditCampPiece campPiece = new BanditCampPiece(manager, SMALL_BANDIT_CAMP, pos, blockRotation, 0);
         structurePiecesHolder.addPiece(campPiece);
     }
 
