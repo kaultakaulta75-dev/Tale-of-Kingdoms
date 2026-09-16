@@ -5,7 +5,6 @@ import com.convallyria.taleofkingdoms.common.generator.processor.GuildStructureP
 import com.convallyria.taleofkingdoms.common.generator.processor.PlayerKingdomStructureProcessor;
 import com.convallyria.taleofkingdoms.common.kingdom.PlayerKingdom;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
-import net.minecraft.SharedConstants;
 import net.minecraft.block.Block;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.structure.StructurePlacementData;
@@ -56,27 +55,41 @@ public abstract class SchematicHandler {
     }
 
     protected void pasteSchematic(Schematic schematic, ServerPlayerEntity player, BlockPos position, BlockRotation rotation, CompletableFuture<BlockBox> cf, SchematicOptions... options) {
-        TaleOfKingdoms.LOGGER.info("Loading schematic, please wait: {}", schematic.toString());
-        final StructureTemplate structure = player.getServerWorld().getStructureTemplateManager().getTemplate(schematic.getPath()).orElseThrow();
-        final boolean old = SharedConstants.isDevelopment;
-        SharedConstants.isDevelopment = true; // We want to crash if something went wrong
-        StructurePlacementData structurePlacementData = new StructurePlacementData();
-        structurePlacementData.setRotation(rotation);
-        TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
-            final GuildPlayer guildPlayer = instance.getPlayer(player);
-            final PlayerKingdom kingdom = guildPlayer.getKingdom();
-            if (kingdom == null) return;
-            structurePlacementData.addProcessor(new PlayerKingdomStructureProcessor(kingdom, player));
-        });
-        structurePlacementData.addProcessor(new GuildStructureProcessor(options));
-        structurePlacementData.addProcessor(JigsawReplacementStructureProcessor.INSTANCE);
-        BlockPos placementPosition = Arrays.asList(options).contains(SchematicOptions.ALIGN_TO_TERRAIN)
-                ? alignToTerrain(schematic, player, structure, position, rotation)
-                : position;
-        structure.place(player.getServerWorld(), placementPosition, placementPosition, structurePlacementData, Random.create(), Block.NOTIFY_ALL);
-        BlockBox box = structure.calculateBoundingBox(structurePlacementData, placementPosition);
-        cf.complete(box);
-        SharedConstants.isDevelopment = old; // Put it back to what it was.
+        try {
+            TaleOfKingdoms.LOGGER.info("Loading schematic, please wait: {}", schematic);
+            final StructureTemplate structure = player.getServerWorld().getStructureTemplateManager()
+                    .getTemplate(schematic.getPath())
+                    .orElseThrow(() -> new IllegalStateException("Missing structure template: " + schematic.getPath()));
+            StructurePlacementData structurePlacementData = new StructurePlacementData();
+            structurePlacementData.setRotation(rotation);
+            TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
+                final GuildPlayer guildPlayer = instance.getPlayer(player);
+                if (guildPlayer == null) return;
+                final PlayerKingdom kingdom = guildPlayer.getKingdom();
+                if (kingdom == null) return;
+                structurePlacementData.addProcessor(new PlayerKingdomStructureProcessor(kingdom, player));
+            });
+            structurePlacementData.addProcessor(new GuildStructureProcessor(options));
+            structurePlacementData.addProcessor(JigsawReplacementStructureProcessor.INSTANCE);
+            BlockPos placementPosition = Arrays.asList(options).contains(SchematicOptions.ALIGN_TO_TERRAIN)
+                    ? alignToTerrain(schematic, player, structure, position, rotation)
+                    : position;
+            boolean placed = structure.place(
+                    player.getServerWorld(),
+                    placementPosition,
+                    placementPosition,
+                    structurePlacementData,
+                    Random.create(),
+                    Block.NOTIFY_ALL
+            );
+            if (!placed) {
+                throw new IllegalStateException("Minecraft rejected structure placement for " + schematic);
+            }
+            cf.complete(structure.calculateBoundingBox(structurePlacementData, placementPosition));
+        } catch (Exception error) {
+            TaleOfKingdoms.LOGGER.error("Unable to place schematic {}", schematic, error);
+            cf.completeExceptionally(error);
+        }
     }
 
     private BlockPos alignToTerrain(Schematic schematic,

@@ -12,8 +12,6 @@ import com.convallyria.taleofkingdoms.common.event.WorldStopCallback;
 import com.convallyria.taleofkingdoms.common.listener.Listener;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.google.gson.Gson;
-import com.google.gson.JsonIOException;
-import com.google.gson.JsonSyntaxException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
@@ -21,12 +19,10 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Environment(EnvType.CLIENT)
 public class StartWorldListener extends Listener {
@@ -42,7 +38,7 @@ public class StartWorldListener extends Listener {
 
     public StartWorldListener() {
         WorldStopCallback.EVENT.register(() -> {
-            if (!joined) return;
+            if (!joined || worldName == null) return;
             if (TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().isEmpty()) return;
 
             ConquestInstance instance = TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().get();
@@ -56,51 +52,42 @@ public class StartWorldListener extends Listener {
             if (api == null) return;
 
             this.worldName = worldName;
-            boolean loaded = load(worldName, api);
-
             File file = new File(api.getDataFolder() + "worlds/" + worldName + ConquestInstance.FILE_TYPE);
+            Gson gson = api.getMod().getGson();
+            Optional<ConquestInstance> savedInstance = ConquestInstance.load(file, gson);
 
-            // Already exists
-            if (loaded) {
-                Gson gson = api.getMod().getGson();
-                // Load from json into class
-                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                    ConquestInstance instance = gson.fromJson(reader, ConquestInstance.class);
-                    Runnable runnable = () -> api.executeOnMain(() -> {
-                        // Check if file exists, but values don't. Game probably crashed?
-                        if ((instance == null || instance.getName() == null) || !instance.isLoaded()) {
-                            PlayerEntity entity = MinecraftClient.getInstance().player;
-                            if (entity == null) return;
+            if (savedInstance.isPresent()) {
+                ConquestInstance instance = savedInstance.get();
+                Runnable runnable = () -> api.executeOnMain(() -> {
+                    if (!instance.isLoaded()) {
+                        PlayerEntity entity = MinecraftClient.getInstance().player;
+                        if (entity == null) return;
 
-                            if (TaleOfKingdoms.CONFIG.mainConfig.showStartKingdomGUI) {
-                                MinecraftClient.getInstance().setScreen(new ScreenStartConquest(worldName, file, entity));
-                            } else {
-                                Text keyName = TaleOfKingdomsClient.START_CONQUEST_KEYBIND.getBoundKeyLocalizedText();
-                                entity.sendMessage(Text.translatable("menu.taleofkingdoms.startconquest.closed", keyName.getString()), false);
-                            }
+                        if (TaleOfKingdoms.CONFIG.mainConfig.showStartKingdomGUI) {
+                            MinecraftClient.getInstance().setScreen(new ScreenStartConquest(worldName, file, entity));
                         } else {
-                            if (TaleOfKingdoms.CONFIG.mainConfig.alwaysShowUpdatesGUI || instance.didUpgrade()) {
-                                MinecraftClient.getInstance().setScreen(new UpdateScreen());
-                            } else if (TaleOfKingdoms.CONFIG.mainConfig.showContinueConquestGUI) {
-                                MinecraftClient.getInstance().setScreen(new ScreenContinueConquest(instance));
-                            }
-
-                            if (api.getConquestInstanceStorage().getConquestInstance(worldName).isEmpty()) {
-                                TaleOfKingdoms.LOGGER.info("Adding world: " + worldName);
-                                api.getConquestInstanceStorage().addConquest(worldName, instance, true);
-                            }
+                            Text keyName = TaleOfKingdomsClient.START_CONQUEST_KEYBIND.getBoundKeyLocalizedText();
+                            entity.sendMessage(Text.translatable("menu.taleofkingdoms.startconquest.closed", keyName.getString()), false);
                         }
-                    });
+                    } else {
+                        if (TaleOfKingdoms.CONFIG.mainConfig.alwaysShowUpdatesGUI || instance.didUpgrade()) {
+                            MinecraftClient.getInstance().setScreen(new UpdateScreen());
+                        } else if (TaleOfKingdoms.CONFIG.mainConfig.showContinueConquestGUI) {
+                            MinecraftClient.getInstance().setScreen(new ScreenContinueConquest(instance));
+                        }
 
-                    if (instance != null) {
-                        TaleOfKingdoms.LOGGER.info("Adding early existing world: " + worldName);
-                        api.getConquestInstanceStorage().addConquest(worldName, instance, true);
+                        if (api.getConquestInstanceStorage().getConquestInstance(worldName).isEmpty()) {
+                            TaleOfKingdoms.LOGGER.info("Adding world: {}", worldName);
+                            api.getConquestInstanceStorage().addConquest(worldName, instance, true);
+                        }
                     }
+                });
 
-                    postJoin.add(runnable);
-                } catch (JsonSyntaxException | JsonIOException | IOException e) {
-                    e.printStackTrace();
+                TaleOfKingdoms.LOGGER.info("Adding early existing world: {}", worldName);
+                if (api.getConquestInstanceStorage().getConquestInstance(worldName).isEmpty()) {
+                        api.getConquestInstanceStorage().addConquest(worldName, instance, true);
                 }
+                postJoin.add(runnable);
                 return;
             }
 
@@ -133,20 +120,4 @@ public class StartWorldListener extends Listener {
         });
     }
 
-    private boolean load(String worldName, TaleOfKingdomsAPI api) {
-        File file = new File(api.getDataFolder() + "worlds/" + worldName + ConquestInstance.FILE_TYPE);
-        // Check if this world has been loaded or not
-        if (!file.exists()) {
-            try {
-                // If not, create new file
-                return file.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return false;
-        } else {
-            // It already exists.
-            return true;
-        }
-    }
 }

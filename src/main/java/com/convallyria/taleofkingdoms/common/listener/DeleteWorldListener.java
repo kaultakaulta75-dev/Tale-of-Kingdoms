@@ -6,6 +6,9 @@ import com.convallyria.taleofkingdoms.common.event.WorldDeleteCallback;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class DeleteWorldListener extends Listener {
 
@@ -17,9 +20,13 @@ public class DeleteWorldListener extends Listener {
                 return;
             }
 
-            File file = new File(api.getDataFolder() + "worlds/" + worldName + ConquestInstance.FILE_TYPE);
-            if (!file.delete() && file.exists()) {
-                TaleOfKingdoms.LOGGER.error("Unable to delete " + worldName + ConquestInstance.FILE_TYPE + " file");
+            Path file = new File(api.getDataFolder() + "worlds/" + worldName + ConquestInstance.FILE_TYPE).toPath();
+            Path backup = file.resolveSibling(file.getFileName() + ".bak");
+            try {
+                Files.deleteIfExists(file);
+                Files.deleteIfExists(backup);
+            } catch (IOException error) {
+                TaleOfKingdoms.LOGGER.error("Unable to delete conquest data for {}", worldName, error);
             }
         });
     }

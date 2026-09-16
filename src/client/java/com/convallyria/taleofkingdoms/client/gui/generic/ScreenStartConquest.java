@@ -69,6 +69,8 @@ public class ScreenStartConquest extends ScreenTOK {
             }
             ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
             if (serverPlayer == null) return;
+            loading = true;
+            button.active = false;
 
             // Load guild castle schematic
             ConquestInstance instance = new ConquestInstance(text.getText(), null, null, serverPlayer.getBlockPos().add(0, 1, 0));
@@ -88,8 +90,8 @@ public class ScreenStartConquest extends ScreenTOK {
                 api.executeOnMain(() -> {
                     button.setMessage(Text.literal("Reloading chunks..."));
                     MinecraftClient.getInstance().worldRenderer.reload();
-                    close();
                     loading = false;
+                    close();
                     instance.setLoaded(true);
                     final GuildPlayer guildPlayer = instance.getPlayer(player.getUuid());
                     guildPlayer.setFarmerLastBread(-1); // Set to -1 in order to claim on first day
@@ -97,10 +99,20 @@ public class ScreenStartConquest extends ScreenTOK {
                 });
 
                 KingdomStartCallback.EVENT.invoker().kingdomStart(serverPlayer, instance); // Call kingdom start event
-            }));
+            })).exceptionally(error -> {
+                TaleOfKingdoms.LOGGER.error("Castle generation failed", error);
+                api.getConquestInstanceStorage().removeConquest(worldName);
+                api.executeOnMain(() -> {
+                    loading = false;
+                    button.active = true;
+                    button.setMessage(Text.literal("Castle generation failed - check latest.log"));
+                });
+                return null;
+            });
         }).dimensions(this.width / 2 - 100, this.height / 2 + 15, 200, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(Text.translatable("menu.taleofkingdoms.startconquest.delay").formatted(Formatting.RED), (b) -> {
+            if (loading) return;
             this.close();
         }).dimensions(this.width / 2 - 50, this.height / 2 + 50, 100, 20).build());
 
@@ -129,7 +141,7 @@ public class ScreenStartConquest extends ScreenTOK {
 
     @Override
     public boolean shouldCloseOnEsc() {
-        return true;
+        return !loading;
     }
 
     @Override
@@ -139,6 +151,7 @@ public class ScreenStartConquest extends ScreenTOK {
 
     @Override
     public void close() {
+        if (loading) return;
         super.close();
         final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
         Optional<ConquestInstance> instance = api.getConquestInstanceStorage().mostRecentInstance();

@@ -13,6 +13,8 @@ import com.convallyria.taleofkingdoms.common.translation.Translations;
 import com.convallyria.taleofkingdoms.common.utils.EntityUtils;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
 import com.google.gson.Gson;
+import com.google.gson.JsonIOException;
+import com.google.gson.JsonSyntaxException;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.block.Block;
@@ -38,9 +40,13 @@ import net.minecraft.world.World;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.Reader;
 import java.io.IOException;
-import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -71,6 +77,7 @@ public class ConquestInstance {
     ));
 
     public void uploadData(ConquestInstance newData) {
+        this.setOrigin(newData.origin);
         this.uploadData(newData.start, newData.end, newData.hasLoaded, newData.underAttack, newData.reficuleAttackLocations, newData.reficuleAttackers, newData.loneVillagersWithRooms, newData.guildPlayers);
     }
 
@@ -79,10 +86,18 @@ public class ConquestInstance {
         this.setEnd(end);
         this.setLoaded(hasLoaded);
         this.setUnderAttack(underAttack);
-        this.getReficuleAttackLocations().addAll(attackLocations);
-        this.getReficuleAttackers().addAll(attackers);
-        this.getLoneVillagersWithRooms().addAll(loneVillagersWithRooms);
-        this.getGuildPlayers().putAll(guildPlayers);
+        List<BlockPos> copiedAttackLocations = List.copyOf(attackLocations);
+        List<UUID> copiedAttackers = List.copyOf(attackers);
+        List<UUID> copiedLoneVillagers = List.copyOf(loneVillagersWithRooms);
+        Map<UUID, GuildPlayer> copiedGuildPlayers = Map.copyOf(guildPlayers);
+        this.getReficuleAttackLocations().clear();
+        this.getReficuleAttackLocations().addAll(copiedAttackLocations);
+        this.getReficuleAttackers().clear();
+        this.getReficuleAttackers().addAll(copiedAttackers);
+        this.getLoneVillagersWithRooms().clear();
+        this.getLoneVillagersWithRooms().addAll(copiedLoneVillagers);
+        this.getGuildPlayers().clear();
+        this.getGuildPlayers().putAll(copiedGuildPlayers);
     }
 
     private final String name;
@@ -156,6 +171,7 @@ public class ConquestInstance {
     }
 
     public Vec3d getCentre() {
+        if (start == null || end == null) return Vec3d.ofCenter(origin);
         return Box.enclosing(start, end).getCenter();
     }
 
@@ -216,7 +232,9 @@ public class ConquestInstance {
 
     public void addLoneVillagerWithRoom(LoneVillagerEntity entity) {
         if (loneVillagersWithRooms == null) this.loneVillagersWithRooms = new ArrayList<>();
-        loneVillagersWithRooms.add(entity.getUuid());
+        if (!loneVillagersWithRooms.contains(entity.getUuid())) {
+            loneVillagersWithRooms.add(entity.getUuid());
+        }
     }
 
     public List<BlockPos> getReficuleAttackLocations() {
@@ -275,6 +293,7 @@ public class ConquestInstance {
     @NotNull
     public List<BlockPos> getSleepLocations(PlayerEntity player) {
         if (validRest == null) validRest = new ArrayList<>();
+        if (start == null || end == null) return validRest;
         if (validRest.isEmpty()) { // Find a valid resting place. This will only run if validRest is empty, which is also saved to file.
             int topBlockX = (Math.max(start.getX(), end.getX()));
             int bottomBlockX = (Math.min(start.getX(), end.getX()));
@@ -302,6 +321,7 @@ public class ConquestInstance {
     }
 
     public List<BlockPos> getValidRest() {
+        if (validRest == null) validRest = new ArrayList<>();
         return validRest;
     }
 
@@ -331,6 +351,7 @@ public class ConquestInstance {
         if (kingdom == null) return false;
         BlockPos start = kingdom.getStart();
         BlockPos end = kingdom.getEnd();
+        if (start == null || end == null) return false;
         BlockBox blockBox = new BlockBox(end.getX(), end.getY(), end.getZ(), start.getX(), start.getY(), start.getZ());
         return blockBox.contains(player.getBlockPos());
     }
@@ -361,16 +382,63 @@ public class ConquestInstance {
 
     public static final String FILE_TYPE = ".cqworld";
 
-    public void save(String worldName) {
+    public synchronized void save(String worldName) {
         final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
-        File file = new File(api.getDataFolder() + "worlds" + File.separator + worldName + FILE_TYPE);
-        try (Writer writer = new FileWriter(file)) {
+        Path worldsDirectory = new File(api.getDataFolder(), "worlds").toPath();
+        Path target = worldsDirectory.resolve(worldName + FILE_TYPE);
+        Path backup = worldsDirectory.resolve(worldName + FILE_TYPE + ".bak");
+        Path temporary = null;
+        try {
+            Files.createDirectories(worldsDirectory);
             Gson gson = api.getMod().getGson();
-            gson.toJson(this, writer);
-            TaleOfKingdoms.LOGGER.info("Saved data");
+            String json = gson.toJson(this);
+            if (json == null || json.isBlank() || "null".equals(json)) {
+                throw new IOException("Conquest data serialization returned no data");
+            }
+
+            temporary = Files.createTempFile(worldsDirectory, "tok-" + Integer.toHexString(worldName.hashCode()) + "-", ".tmp");
+            Files.writeString(temporary, json, StandardCharsets.UTF_8);
+            if (Files.exists(target) && Files.size(target) > 0 && readSave(target, gson).isPresent()) {
+                Files.copy(target, backup, StandardCopyOption.REPLACE_EXISTING);
+            }
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+            TaleOfKingdoms.LOGGER.info("Saved conquest data for {}", worldName);
         } catch (IOException e) {
-            TaleOfKingdoms.LOGGER.error("Error saving data: ", e);
-            e.printStackTrace();
+            TaleOfKingdoms.LOGGER.error("Error saving conquest data for {}", worldName, e);
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException cleanupError) {
+                    TaleOfKingdoms.LOGGER.warn("Unable to remove temporary conquest save {}", temporary, cleanupError);
+                }
+            }
+        }
+    }
+
+    public static Optional<ConquestInstance> load(File file, Gson gson) {
+        Optional<ConquestInstance> primary = readSave(file.toPath(), gson);
+        if (primary.isPresent()) return primary;
+
+        Path backup = file.toPath().resolveSibling(file.getName() + ".bak");
+        Optional<ConquestInstance> recovered = readSave(backup, gson);
+        recovered.ifPresent(instance -> TaleOfKingdoms.LOGGER.warn("Recovered conquest data from {}", backup));
+        return recovered;
+    }
+
+    private static Optional<ConquestInstance> readSave(Path path, Gson gson) {
+        if (!Files.isRegularFile(path)) return Optional.empty();
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            ConquestInstance instance = gson.fromJson(reader, ConquestInstance.class);
+            if (instance == null || instance.getName() == null) return Optional.empty();
+            return Optional.of(instance);
+        } catch (JsonSyntaxException | JsonIOException | IOException error) {
+            TaleOfKingdoms.LOGGER.error("Unable to read conquest data from {}", path, error);
+            return Optional.empty();
         }
     }
 }

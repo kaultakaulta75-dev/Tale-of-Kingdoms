@@ -15,8 +15,6 @@ import com.convallyria.taleofkingdoms.server.TaleOfKingdomsServer;
 import com.convallyria.taleofkingdoms.server.TaleOfKingdomsServerAPI;
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import com.google.gson.Gson;
-import com.google.gson.JsonIOException;
-import com.google.gson.JsonSyntaxException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.server.dedicated.MinecraftDedicatedServer;
@@ -24,10 +22,8 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 @Environment(EnvType.SERVER)
@@ -39,30 +35,15 @@ public class ServerGameInstanceListener extends Listener {
 
         PlayerJoinCallback.EVENT.register((no, player) -> api.executeOnDedicatedServer(() -> {
             MinecraftDedicatedServer server = api.getServer();
-            boolean loaded = load(server.getLevelName(), api);
+            if (api.getConquestInstanceStorage().getConquestInstance(server.getLevelName()).isPresent()) return;
+
             File conquestFile = new File(api.getDataFolder() + "worlds/" + server.getLevelName() + ConquestInstance.FILE_TYPE);
-            if (loaded) {
-                // Already exists
-                Gson gson = api.getMod().getGson();
-                try {
-                    // Load from json into class
-                    ConquestInstance instance = null;
-                    try (BufferedReader reader = new BufferedReader(new FileReader(conquestFile))) {
-                        instance = gson.fromJson(reader, ConquestInstance.class);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                    // Check if file exists, but values don't. Game probably crashed?
-                    if ((instance == null || instance.getName() == null) || !instance.isLoaded()) {
-                        this.create(api, player, server);
-                    } else {
-                        if (api.getConquestInstanceStorage().getConquestInstance(server.getLevelName()).isEmpty()) {
-                            api.getConquestInstanceStorage().addConquest(server.getLevelName(), instance, true);
-                        }
-                    }
-                } catch (JsonSyntaxException | JsonIOException e) {
-                    e.printStackTrace();
-                }
+            Gson gson = api.getMod().getGson();
+            Optional<ConquestInstance> savedInstance = ConquestInstance.load(conquestFile, gson);
+            if (savedInstance.isPresent() && savedInstance.get().isLoaded()) {
+                api.getConquestInstanceStorage().addConquest(server.getLevelName(), savedInstance.get(), true);
+            } else {
+                this.create(api, player, server);
             }
         }));
 
@@ -86,23 +67,6 @@ public class ServerGameInstanceListener extends Listener {
         }));
     }
 
-    private boolean load(String worldName, TaleOfKingdomsAPI api) {
-        File file = new File(api.getDataFolder() + "worlds/" + worldName + ConquestInstance.FILE_TYPE);
-        // Check if this world has been loaded or not
-        if (!file.exists()) {
-            try {
-                // If not, create new file
-                return file.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return false;
-        } else {
-            // It already exists.
-            return true;
-        }
-    }
-
     private CompletableFuture<Void> create(TaleOfKingdomsAPI api, ServerPlayerEntity player, MinecraftDedicatedServer server) {
         // int topY = server.getOverworld().getTopY(Heightmap.Type.MOTION_BLOCKING, 0, 0);
         BlockPos pastePos = player.getBlockPos().subtract(new Vec3i(0, 20, 0));
@@ -123,7 +87,8 @@ public class ServerGameInstanceListener extends Listener {
             instance.sync(player);*/
             instance.save(server.getLevelName());
         }).exceptionally(error -> {
-            error.printStackTrace();
+            api.getConquestInstanceStorage().removeConquest(server.getLevelName());
+            TaleOfKingdoms.LOGGER.error("Dedicated-server castle generation failed", error);
             return null;
         });
     }
