@@ -54,6 +54,7 @@ jobs:
 
           copy_dependency() {
             local pattern="$1"
+            local output_name="${2:-}"
             local dependency
             dependency="$(find "${GRADLE_USER_HOME}/caches/modules-2/files-2.1" -type f \
               -name "${pattern}" ! -name '*sources*' ! -name '*dev*' | head -n 1)"
@@ -61,12 +62,17 @@ jobs:
               echo "Dependency not found: ${pattern}" >&2
               exit 1
             fi
-            cp "${dependency}" production-server/mods/
+            if [[ -n "${output_name}" ]]; then
+              cp "${dependency}" "production-server/mods/${output_name}"
+            else
+              cp "${dependency}" production-server/mods/
+            fi
           }
 
           copy_dependency 'forgified-fabric-api-0.116.15+2.3.5+1.21.1.jar'
           copy_dependency 'cloth-config-neoforge-15.0.140-neoforge.jar'
-          copy_dependency 'owo-lib-neoforge-0.12.15.5-beta.1+1.21.jar'
+          copy_dependency 'owo-lib-532610-6785734.jar' \
+            'owo-lib-neoforge-0.12.15.5-beta.1+1.21.jar'
           echo 'eula=true' > production-server/eula.txt
           ls -lh production-server/mods
 
