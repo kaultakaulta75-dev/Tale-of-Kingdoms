@@ -59,6 +59,7 @@ dependencies {
     modImplementation "me.shedaniel.cloth:cloth-config-neoforge:${project.cloth_version}"
     // The current NeoForge 1.21.1 build is distributed through CurseForge.
     modImplementation "curse.maven:owo-lib-532610:6785734"
+    compileOnly "io.wispforest:endec:0.1.5.1"
 
     // Compile-only until the remaining EnvType annotations are migrated.
     modCompileOnly "net.fabricmc:fabric-loader:${project.loader_version}"
