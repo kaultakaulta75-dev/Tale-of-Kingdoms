@@ -9,6 +9,7 @@ import com.convallyria.taleofkingdoms.common.event.PlayerLeaveCallback;
 import com.convallyria.taleofkingdoms.common.event.tok.KingdomStartCallback;
 import com.convallyria.taleofkingdoms.common.listener.Listener;
 import com.convallyria.taleofkingdoms.common.schematic.Schematic;
+import com.convallyria.taleofkingdoms.common.schematic.SchematicOptions;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.server.TaleOfKingdomsServer;
 import com.convallyria.taleofkingdoms.server.TaleOfKingdomsServerAPI;
@@ -108,11 +109,12 @@ public class ServerGameInstanceListener extends Listener {
         ConquestInstance instance = new ConquestInstance(server.getName(), null, null, player.getBlockPos().add(0, 1, 0));
         instance.reset(player);
         api.getConquestInstanceStorage().addConquest(server.getLevelName(), instance, true);
-        return api.getSchematicHandler().pasteSchematic(Schematic.GUILD_CASTLE, player, pastePos).thenAccept(oi -> {
+        return api.getSchematicHandler().pasteSchematic(Schematic.GUILD_CASTLE, player, pastePos, SchematicOptions.ALIGN_TO_TERRAIN).thenAccept(oi -> {
             BlockPos start = new BlockPos(oi.getMaxX(), oi.getMaxY(), oi.getMaxZ());
             BlockPos end = new BlockPos(oi.getMinX(), oi.getMinY(), oi.getMinZ());
             instance.setStart(start);
             instance.setEnd(end);
+            instance.setOrigin(new BlockPos(oi.getMinX(), oi.getMinY() + 21, oi.getMinZ()));
             
             TaleOfKingdoms.LOGGER.info("Summoning citizens of the realm...");
             KingdomStartCallback.EVENT.invoker().kingdomStart(player, instance); // Call kingdom start event

@@ -90,7 +90,7 @@ public class ConquestInstance {
     private boolean hasLoaded;
     private BlockPos start;
     private BlockPos end;
-    private final BlockPos origin;
+    private BlockPos origin;
     private boolean underAttack;
     private final List<BlockPos> reficuleAttackLocations;
     private final List<UUID> reficuleAttackers;
@@ -149,6 +149,10 @@ public class ConquestInstance {
 
     public BlockPos getOrigin() {
         return origin;
+    }
+
+    public void setOrigin(BlockPos origin) {
+        this.origin = origin;
     }
 
     public Vec3d getCentre() {

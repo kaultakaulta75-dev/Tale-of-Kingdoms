@@ -7,6 +7,7 @@ import com.convallyria.taleofkingdoms.client.gui.ScreenTOK;
 import com.convallyria.taleofkingdoms.common.translation.Translations;
 import com.convallyria.taleofkingdoms.common.event.tok.KingdomStartCallback;
 import com.convallyria.taleofkingdoms.common.schematic.Schematic;
+import com.convallyria.taleofkingdoms.common.schematic.SchematicOptions;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
 import net.minecraft.client.MinecraftClient;
@@ -75,11 +76,12 @@ public class ScreenStartConquest extends ScreenTOK {
             api.getConquestInstanceStorage().addConquest(worldName, instance, true);
 
             BlockPos pastePos = serverPlayer.getBlockPos().subtract(new Vec3i(0, 20, 0));
-            api.getSchematicHandler().pasteSchematic(Schematic.GUILD_CASTLE, serverPlayer, pastePos).thenAccept(oi -> api.executeOnServerEnvironment((s) -> {
+            api.getSchematicHandler().pasteSchematic(Schematic.GUILD_CASTLE, serverPlayer, pastePos, SchematicOptions.ALIGN_TO_TERRAIN).thenAccept(oi -> api.executeOnServerEnvironment((s) -> {
                 BlockPos start = new BlockPos(oi.getMaxX(), oi.getMaxY(), oi.getMaxZ());
                 BlockPos end = new BlockPos(oi.getMinX(), oi.getMinY(), oi.getMinZ());
                 instance.setStart(start);
                 instance.setEnd(end);
+                instance.setOrigin(new BlockPos(oi.getMinX(), oi.getMinY() + 21, oi.getMinZ()));
 
                 button.setMessage(Translations.SUMMONING_CITIZENS.getTranslation());
 

@@ -9,6 +9,7 @@ import com.convallyria.taleofkingdoms.common.packet.Packets;
 import com.convallyria.taleofkingdoms.common.packet.c2s.BuildKingdomPacket;
 import com.convallyria.taleofkingdoms.common.packet.context.PacketContext;
 import com.convallyria.taleofkingdoms.common.schematic.Schematic;
+import com.convallyria.taleofkingdoms.common.schematic.SchematicOptions;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import net.minecraft.entity.Entity;
@@ -59,11 +60,12 @@ public final class IncomingBuildKingdomPacket extends InServerPacketHandler<Buil
                 guildPlayer.setKingdom(playerKingdom);
 
                 // Paste their kingdom
-                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(Schematic.TIER_1_KINGDOM, player, pos).thenAccept(box -> {
+                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(Schematic.TIER_1_KINGDOM, player, pos, SchematicOptions.ALIGN_TO_TERRAIN).thenAccept(box -> {
                     BlockPos start = new BlockPos(box.getMaxX(), box.getMaxY(), box.getMaxZ());
                     BlockPos end = new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ());
                     playerKingdom.setStart(start);
                     playerKingdom.setEnd(end);
+                    playerKingdom.setOrigin(new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ()));
 
                     // Make city builder stop following player and move to well POI
                     cityBuilderEntity.stopFollowingPlayer();

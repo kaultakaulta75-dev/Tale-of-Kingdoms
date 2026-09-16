@@ -45,7 +45,7 @@ public class PlayerKingdom {
     ));
 
     private BlockPos start, end;
-    private final BlockPos origin;
+    private BlockPos origin;
     private final Map<KingdomPOI, BlockPos> poi;
     private final List<BuildCosts> builtBuildings;
     private KingdomTier tier;
@@ -74,6 +74,10 @@ public class PlayerKingdom {
 
     public BlockPos getOrigin() {
         return this.origin;
+    }
+
+    public void setOrigin(BlockPos origin) {
+        this.origin = origin;
     }
 
     public BlockPos getStart() {
