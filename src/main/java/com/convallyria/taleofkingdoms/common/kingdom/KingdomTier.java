@@ -5,6 +5,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.Vec3i;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Optional;
+
 public enum KingdomTier {
     TIER_ONE(Text.translatable("menu.taleofkingdoms.generic.tier_one"), Schematic.TIER_1_KINGDOM, Vec3i.ZERO),
     TIER_TWO(Text.translatable("menu.taleofkingdoms.generic.tier_two"), Schematic.TIER_2_KINGDOM, new Vec3i(16, 0, 49));
@@ -29,6 +31,15 @@ public enum KingdomTier {
 
     public Vec3i getOffset() {
         return offset;
+    }
+
+    public Optional<KingdomTier> next() {
+        int nextOrdinal = ordinal() + 1;
+        return nextOrdinal < values().length ? Optional.of(values()[nextOrdinal]) : Optional.empty();
+    }
+
+    public boolean isMaximum() {
+        return next().isEmpty();
     }
 
     public boolean isLowerThanOrEqual(@Nullable KingdomTier tier) {

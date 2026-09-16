@@ -50,6 +50,7 @@ public class PlayerKingdom {
     private final List<BuildCosts> builtBuildings;
     private KingdomTier tier;
     private long lastStockMarketUpdate, lastTaxCollection;
+    private transient boolean constructionInProgress;
 
     public PlayerKingdom(BlockPos origin) {
         this.origin = origin;
@@ -117,7 +118,21 @@ public class PlayerKingdom {
     }
 
     public void addBuilt(BuildCosts poi) {
-        this.builtBuildings.add(poi);
+        if (!this.builtBuildings.contains(poi)) this.builtBuildings.add(poi);
+    }
+
+    public boolean beginConstruction() {
+        if (constructionInProgress) return false;
+        constructionInProgress = true;
+        return true;
+    }
+
+    public void finishConstruction() {
+        constructionInProgress = false;
+    }
+
+    public boolean isConstructionInProgress() {
+        return constructionInProgress;
     }
 
     public long getLastStockMarketUpdate() {

@@ -54,7 +54,12 @@ public final class IncomingCityBuilderActionPacketHandler extends InServerPacket
             switch (action) {
                 case GIVE_64_WOOD -> cityBuilderEntity.give64wood(player);
                 case GIVE_64_STONE -> cityBuilderEntity.give64stone(player);
-                case FIX_KINGDOM -> cityBuilderEntity.fixKingdom(player, kingdom);
+                case FIX_KINGDOM -> cityBuilderEntity.fixKingdom(player, kingdom)
+                        .thenRun(() -> ServerConquestInstance.sync(player, instance))
+                        .exceptionally(error -> {
+                            TaleOfKingdoms.LOGGER.error("Failed to repair kingdom for {}", player.getName().getString(), error);
+                            return null;
+                        });
                 case BUILD -> {
                     if (buildCosts.isEmpty()) {
                         reject(player, "Invalid build cost");
@@ -71,7 +76,12 @@ public final class IncomingCityBuilderActionPacketHandler extends InServerPacket
                         return;
                     }
 
-                    cityBuilderEntity.build(player, buildCosts.get(), kingdom).thenAccept((v) -> ServerConquestInstance.sync(player, instance));
+                    cityBuilderEntity.build(player, buildCosts.get(), kingdom)
+                            .thenRun(() -> ServerConquestInstance.sync(player, instance))
+                            .exceptionally(error -> {
+                                TaleOfKingdoms.LOGGER.error("Failed to build {} for {}", buildCosts.get(), player.getName().getString(), error);
+                                return null;
+                            });
                 }
             }
         }));

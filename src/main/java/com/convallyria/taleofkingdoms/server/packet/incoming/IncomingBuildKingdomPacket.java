@@ -14,6 +14,7 @@ import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.Vec3i;
@@ -57,10 +58,19 @@ public final class IncomingBuildKingdomPacket extends InServerPacketHandler<Buil
 
                 BlockPos pos = player.getBlockPos().subtract(new Vec3i(0, 25, 85));
                 final PlayerKingdom playerKingdom = new PlayerKingdom(pos);
+                playerKingdom.beginConstruction();
                 guildPlayer.setKingdom(playerKingdom);
 
                 // Paste their kingdom
-                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(Schematic.TIER_1_KINGDOM, player, pos, SchematicOptions.ALIGN_TO_TERRAIN).thenAccept(box -> {
+                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(Schematic.TIER_1_KINGDOM, player, pos, SchematicOptions.ALIGN_TO_TERRAIN).whenComplete((box, error) -> {
+                    playerKingdom.finishConstruction();
+                    if (error != null) {
+                        if (guildPlayer.getKingdom() == playerKingdom) guildPlayer.setKingdom(null);
+                        TaleOfKingdoms.LOGGER.error("Failed to build kingdom for {}", player.getName().getString(), error);
+                        player.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.build_failed"), false);
+                        ServerConquestInstance.sync(player, instance);
+                        return;
+                    }
                     BlockPos start = new BlockPos(box.getMaxX(), box.getMaxY(), box.getMaxZ());
                     BlockPos end = new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ());
                     playerKingdom.setStart(start);
@@ -72,7 +82,8 @@ public final class IncomingBuildKingdomPacket extends InServerPacketHandler<Buil
                     // Teleport to the player first, should avoid getting stuck in ground
                     cityBuilderEntity.requestTeleport(player.getX(), player.getY(), player.getZ());
                     // Now move to the well location
-                    cityBuilderEntity.setTarget(playerKingdom.getPOIPos(KingdomPOI.CITY_BUILDER_WELL_POI));
+                    BlockPos well = playerKingdom.getPOIPos(KingdomPOI.CITY_BUILDER_WELL_POI);
+                    if (well != null) cityBuilderEntity.setTarget(well);
 
                     ServerConquestInstance.sync(player, instance);
                 });

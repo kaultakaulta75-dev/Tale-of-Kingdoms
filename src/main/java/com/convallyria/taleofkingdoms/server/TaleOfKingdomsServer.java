@@ -15,6 +15,7 @@ import com.convallyria.taleofkingdoms.server.packet.incoming.IncomingForemanColl
 import com.convallyria.taleofkingdoms.server.packet.incoming.IncomingHunterPacketHandler;
 import com.convallyria.taleofkingdoms.server.packet.incoming.IncomingInnkeeperPacketHandler;
 import com.convallyria.taleofkingdoms.server.packet.incoming.IncomingToggleSellGuiPacketHandler;
+import com.convallyria.taleofkingdoms.server.packet.incoming.IncomingUpgradeKingdomPacketHandler;
 import com.convallyria.taleofkingdoms.server.packet.outgoing.OutgoingInstanceSyncPacketHandler;
 import com.convallyria.taleofkingdoms.server.packet.outgoing.OutgoingOpenScreenPacketHandler;
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
@@ -64,6 +65,7 @@ public class TaleOfKingdomsServer implements DedicatedServerModInitializer {
         registerHandler(new IncomingHunterPacketHandler());
         registerHandler(new IncomingInnkeeperPacketHandler());
         registerHandler(new IncomingToggleSellGuiPacketHandler());
+        registerHandler(new IncomingUpgradeKingdomPacketHandler());
 
         registerHandler(new OutgoingInstanceSyncPacketHandler());
         registerHandler(new OutgoingOpenScreenPacketHandler());

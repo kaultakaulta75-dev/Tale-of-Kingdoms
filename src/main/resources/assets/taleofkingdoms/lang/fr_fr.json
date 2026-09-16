@@ -165,5 +165,7 @@
     "entity_type.taleofkingdoms.lostvillager.guild_thank": "Villageois perdu: Mon roi! Merci de m'avoir sauvé.",
     "entity_type.taleofkingdoms.guildmaster.contract.cancel.await": "Maître de guilde: Nous attendons votre participation, héros.",
     "entity_type.taleofkingdoms.villager.ask_to_work": "Villageois : Mon roi ! Avez-vous besoin d'un travailleur ? Donnez-moi une hache et une pioche et je travaillerai pour vous.",
-    "entity.taleofkingdoms.kingdom_villager": "Villageois du Royaume"
+    "entity.taleofkingdoms.kingdom_villager": "Villageois du Royaume",
+    "message.taleofkingdoms.kingdom.build_failed": "Le royaume n'a pas pu être construit. Tu peux réessayer.",
+    "message.taleofkingdoms.kingdom.upgrade_failed": "Le royaume n'a pas pu être amélioré. Tes ressources n'ont pas été consommées."
 }

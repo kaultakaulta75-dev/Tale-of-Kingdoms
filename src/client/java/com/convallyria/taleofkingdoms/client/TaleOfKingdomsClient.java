@@ -21,6 +21,7 @@ import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingForemanColl
 import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingHunterPacketHandler;
 import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingInnkeeperPacketHandler;
 import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingToggleSellGuiPacketHandler;
+import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingUpgradeKingdomPacketHandler;
 import com.convallyria.taleofkingdoms.common.kingdom.PlayerKingdom;
 import com.convallyria.taleofkingdoms.common.packet.PacketHandler;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
@@ -125,6 +126,7 @@ public class TaleOfKingdomsClient implements ClientModInitializer {
         registerHandler(new OutgoingHunterPacketHandler());
         registerHandler(new OutgoingInnkeeperPacketHandler());
         registerHandler(new OutgoingToggleSellGuiPacketHandler());
+        registerHandler(new OutgoingUpgradeKingdomPacketHandler());
 
         registerHandler(new IncomingInstanceSyncPacketHandler());
         registerHandler(new IncomingOpenScreenPacketHandler());

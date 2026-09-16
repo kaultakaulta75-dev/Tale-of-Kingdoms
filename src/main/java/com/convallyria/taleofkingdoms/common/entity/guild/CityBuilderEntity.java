@@ -38,6 +38,8 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
@@ -117,69 +119,111 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
     }
 
     public void give64wood(PlayerEntity player) {
-        final int playerWoodCount = InventoryUtils.count(player.getInventory(), ItemTags.LOGS);
         TaleOfKingdoms.getAPI().executeOnServerEnvironment((server) -> {
-            final ItemStack stack = InventoryUtils.getStack(player.getInventory(), ItemTags.LOGS, 64);
             final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
-            final CityBuilderEntity serverCityBuilder = (CityBuilderEntity) serverPlayer.getWorld().getEntityById(this.getId());
-            if (stack != null && playerWoodCount >= 64 && getWood() <= (320 - 64) && serverCityBuilder.getInventory().canInsert(stack)) {
-                int slot = serverPlayer.getInventory().getSlotWithStack(stack);
-                serverPlayer.getInventory().removeStack(slot);
-                player.getInventory().removeStack(slot);
+            if (serverPlayer == null || !(serverPlayer.getWorld().getEntityById(this.getId()) instanceof CityBuilderEntity serverCityBuilder)) return;
+            final ItemStack stack = new ItemStack(Items.OAK_LOG, 64);
+            if (serverCityBuilder.getWood() <= (320 - 64)
+                    && serverCityBuilder.getInventory().canInsert(stack)
+                    && InventoryUtils.remove(serverPlayer.getInventory(), ItemTags.LOGS, 64)) {
                 serverCityBuilder.getInventory().addStack(new ItemStack(Items.OAK_LOG, 64));
             }
         });
     }
 
     public void give64stone(PlayerEntity player) {
-        final int playerCobblestoneCount = player.getInventory().count(Items.COBBLESTONE);
         TaleOfKingdoms.getAPI().executeOnServerEnvironment((server) -> {
             final ItemStack stack = new ItemStack(Items.COBBLESTONE, 64);
             final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
-            final CityBuilderEntity serverCityBuilder = (CityBuilderEntity) serverPlayer.getWorld().getEntityById(this.getId());
-            if (playerCobblestoneCount >= 64 && getStone() <= (320 - 64) && serverCityBuilder.getInventory().canInsert(stack)) {
-                int slot = serverPlayer.getInventory().getSlotWithStack(stack);
-                serverPlayer.getInventory().removeStack(slot);
-                player.getInventory().removeStack(slot);
+            if (serverPlayer == null || !(serverPlayer.getWorld().getEntityById(this.getId()) instanceof CityBuilderEntity serverCityBuilder)) return;
+            if (serverCityBuilder.getStone() <= (320 - 64)
+                    && serverCityBuilder.getInventory().canInsert(stack)
+                    && InventoryUtils.remove(serverPlayer.getInventory(), Items.COBBLESTONE, 64)) {
                 serverCityBuilder.getInventory().addStack(stack);
             }
         });
     }
 
-    public void fixKingdom(PlayerEntity player, PlayerKingdom kingdom) {
-        if (this.getStone() != 320 || this.getWood() != 320)
-            return;
-
+    public CompletableFuture<Void> fixKingdom(PlayerEntity player, PlayerKingdom kingdom) {
+        CompletableFuture<Void> result = new CompletableFuture<>();
         TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
             final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
-            final CityBuilderEntity serverCityBuilder = (CityBuilderEntity) serverPlayer.getWorld().getEntityById(this.getId());
+            if (serverPlayer == null || !(serverPlayer.getWorld().getEntityById(this.getId()) instanceof CityBuilderEntity serverCityBuilder)) {
+                result.completeExceptionally(new IllegalStateException("City builder is no longer available"));
+                return;
+            }
+            if (serverCityBuilder.getStone() != 320 || serverCityBuilder.getWood() != 320) {
+                result.completeExceptionally(new IllegalStateException("Not enough resources to repair kingdom"));
+                return;
+            }
+            if (!kingdom.beginConstruction()) {
+                result.completeExceptionally(new IllegalStateException("Another kingdom construction is already in progress"));
+                return;
+            }
+
+            List<CompletableFuture<?>> placements = new ArrayList<>();
             final Schematic kingdomSchematic = kingdom.getTier().getSchematic();
             BlockPos newOrigin = kingdom.getOrigin().subtract(kingdom.getTier().getOffset());
-            TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(kingdomSchematic, serverPlayer, newOrigin);
+            placements.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(kingdomSchematic, serverPlayer, newOrigin));
             for (BuildCosts buildCost : BuildCosts.values()) {
                 if (kingdom.getTier() != buildCost.getTier()) continue;
                 final KingdomPOI kingdomPOI = buildCost.getKingdomPOI();
                 final Schematic schematic = buildCost.getSchematic();
-                if (kingdom.hasBuilt(buildCost)) {
-                    TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(schematic, serverPlayer, kingdom.getPOIPos(kingdomPOI), buildCost.getSchematicRotation());
+                final BlockPos buildPos = kingdom.getPOIPos(kingdomPOI);
+                if (kingdom.hasBuilt(buildCost) && schematic != null && buildPos != null) {
+                    placements.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(schematic, serverPlayer, buildPos, buildCost.getSchematicRotation()));
                 }
             }
-            serverCityBuilder.getInventory().clear();
+
+            CompletableFuture.allOf(placements.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> {
+                kingdom.finishConstruction();
+                if (error != null) {
+                    TaleOfKingdoms.LOGGER.error("Failed to repair kingdom for {}", serverPlayer.getName().getString(), error);
+                    result.completeExceptionally(error);
+                    return;
+                }
+                serverCityBuilder.getInventory().clear();
+                result.complete(null);
+            });
         });
+        return result;
     }
 
     public CompletableFuture<Void> build(PlayerEntity player, BuildCosts build, PlayerKingdom kingdom) {
         CompletableFuture<Void> future = new CompletableFuture<>();
         TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
             final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
-            final CityBuilderEntity serverCityBuilder = (CityBuilderEntity) serverPlayer.getWorld().getEntityById(this.getId());
-            kingdom.addBuilt(build);
-            TaleOfKingdoms.LOGGER.info("Placing {}...", build);
-            TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(build.getSchematic(), serverPlayer, kingdom.getPOIPos(build.getKingdomPOI()), build.getSchematicRotation());
+            if (serverPlayer == null || !(serverPlayer.getWorld().getEntityById(this.getId()) instanceof CityBuilderEntity serverCityBuilder)) {
+                future.completeExceptionally(new IllegalStateException("City builder is no longer available"));
+                return;
+            }
+            if (!serverCityBuilder.canAffordBuild(kingdom, build)) {
+                future.completeExceptionally(new IllegalStateException("Not enough resources for building"));
+                return;
+            }
+            final BlockPos buildPos = kingdom.getPOIPos(build.getKingdomPOI());
+            if (build.getSchematic() == null || buildPos == null) {
+                future.completeExceptionally(new IllegalStateException("Building schematic or location is missing"));
+                return;
+            }
+            if (!kingdom.beginConstruction()) {
+                future.completeExceptionally(new IllegalStateException("Another kingdom construction is already in progress"));
+                return;
+            }
 
-            serverCityBuilder.getInventory().removeItem(Items.OAK_LOG, build.getWood());
-            serverCityBuilder.getInventory().removeItem(Items.COBBLESTONE, build.getStone());
-            future.complete(null);
+            TaleOfKingdoms.LOGGER.info("Placing {}...", build);
+            TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(build.getSchematic(), serverPlayer, buildPos, build.getSchematicRotation()).whenComplete((box, error) -> {
+                kingdom.finishConstruction();
+                if (error != null) {
+                    TaleOfKingdoms.LOGGER.error("Failed to place {} for {}", build, serverPlayer.getName().getString(), error);
+                    future.completeExceptionally(error);
+                    return;
+                }
+                if (!kingdom.hasBuilt(build)) kingdom.addBuilt(build);
+                serverCityBuilder.getInventory().removeItem(Items.OAK_LOG, build.getWood());
+                serverCityBuilder.getInventory().removeItem(Items.COBBLESTONE, build.getStone());
+                future.complete(null);
+            });
         });
         return future;
     }

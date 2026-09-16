@@ -74,7 +74,7 @@ public class CityBuilderTierGui extends BaseCityBuilderScreen {
 
         buildButtons.forEach((build, button) -> button.active(entity.canAffordBuild(kingdom, build) && kingdom.getTier() == build.getTier()));
 
-        final boolean isMaxed = kingdom.getTier().ordinal() + 1 == KingdomTier.values().length;
+        final boolean isMaxed = kingdom.getTier().isMaximum();
         final boolean hasBuiltRequired = Arrays.stream(BuildCosts.values()).noneMatch(cost -> kingdom.getTier() == cost.getTier() && !kingdom.hasBuilt(cost));
         final boolean hasResources = entity.getWood() == 320 && entity.getStone() == 320;
         this.tierUpgradeButton.active(!isMaxed && hasBuiltRequired && hasResources);
@@ -164,10 +164,10 @@ public class CityBuilderTierGui extends BaseCityBuilderScreen {
             }).positioning(Positioning.relative(80, 80)).sizing(Sizing.fixed(100), Sizing.fixed(20))
         );
 
-        final boolean isMaxed = kingdom.getTier().ordinal() + 1 == KingdomTier.values().length;
+        final boolean isMaxed = kingdom.getTier().isMaximum();
         final boolean hasBuiltRequired = Arrays.stream(BuildCosts.values()).noneMatch(cost -> kingdom.getTier() == cost.getTier() && !kingdom.hasBuilt(cost));
         final boolean hasResources = entity.getWood() == 320 && entity.getStone() == 320;
-        final KingdomTier nextTier = isMaxed ? kingdom.getTier() : KingdomTier.values()[kingdom.getTier().ordinal() + 1];
+        final KingdomTier nextTier = kingdom.getTier().next().orElse(kingdom.getTier());
         inner.child(
             this.tierUpgradeButton = (ButtonComponent) Components.button(Text
                             .translatable("menu.taleofkingdoms.generic.build")
@@ -202,6 +202,7 @@ public class CityBuilderTierGui extends BaseCityBuilderScreen {
                 if (MinecraftClient.getInstance().getServer() == null) {
                     TaleOfKingdomsClient.getAPI().getClientPacket(Packets.CITYBUILDER_ACTION)
                             .sendPacket(player, new CityBuilderActionPacket(entity.getId(), CityBuilderAction.BUILD, Optional.of(build)));
+                    MinecraftClient.getInstance().currentScreen.close();
                     return;
                 }
 

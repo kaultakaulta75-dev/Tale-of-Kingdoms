@@ -8,6 +8,8 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.registry.tag.TagKey;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.function.Predicate;
+
 public class InventoryUtils {
 
     @Nullable
@@ -52,5 +54,35 @@ public class InventoryUtils {
             i += itemStack.getCount();
         }
         return i;
+    }
+
+    public static boolean remove(Inventory inventory, TagKey<Item> tag, int count) {
+        return remove(inventory, stack -> stack.getItem().getRegistryEntry().isIn(tag), count);
+    }
+
+    public static boolean remove(Inventory inventory, Item item, int count) {
+        return remove(inventory, stack -> stack.isOf(item), count);
+    }
+
+    private static boolean remove(Inventory inventory, Predicate<ItemStack> predicate, int count) {
+        if (count <= 0) return true;
+
+        int available = 0;
+        for (int slot = 0; slot < inventory.size(); slot++) {
+            ItemStack stack = inventory.getStack(slot);
+            if (predicate.test(stack)) available += stack.getCount();
+        }
+        if (available < count) return false;
+
+        int remaining = count;
+        for (int slot = 0; slot < inventory.size() && remaining > 0; slot++) {
+            ItemStack stack = inventory.getStack(slot);
+            if (!predicate.test(stack)) continue;
+            int removed = Math.min(remaining, stack.getCount());
+            stack.decrement(removed);
+            remaining -= removed;
+        }
+        inventory.markDirty();
+        return true;
     }
 }

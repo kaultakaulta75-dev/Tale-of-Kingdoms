@@ -54,13 +54,22 @@ public class ConfirmBuildKingdomGui extends BaseCityBuilderScreen {
 
                 final IntegratedServer server = MinecraftClient.getInstance().getServer();
                 final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                if (serverPlayer == null) return;
                 BlockPos pos = serverPlayer.getBlockPos().subtract(new Vec3i(0, 25, 85));
                 final PlayerKingdom playerKingdom = new PlayerKingdom(pos);
                 final GuildPlayer guildPlayer = instance.getPlayer(player);
+                playerKingdom.beginConstruction();
                 guildPlayer.setKingdom(playerKingdom);
 
                 // Paste their kingdom
-                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(Schematic.TIER_1_KINGDOM, serverPlayer, pos, SchematicOptions.ALIGN_TO_TERRAIN).thenAccept(box -> {
+                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(Schematic.TIER_1_KINGDOM, serverPlayer, pos, SchematicOptions.ALIGN_TO_TERRAIN).whenComplete((box, error) -> {
+                    playerKingdom.finishConstruction();
+                    if (error != null) {
+                        if (guildPlayer.getKingdom() == playerKingdom) guildPlayer.setKingdom(null);
+                        TaleOfKingdoms.LOGGER.error("Failed to build kingdom for {}", serverPlayer.getName().getString(), error);
+                        serverPlayer.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.build_failed"), false);
+                        return;
+                    }
                     BlockPos start = new BlockPos(box.getMaxX(), box.getMaxY(), box.getMaxZ());
                     BlockPos end = new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ());
                     playerKingdom.setStart(start);
@@ -69,12 +78,13 @@ public class ConfirmBuildKingdomGui extends BaseCityBuilderScreen {
 
                     // Make city builder stop following player and move to well POI
                     TaleOfKingdoms.getAPI().executeOnServerEnvironment((s) -> {
-                        final CityBuilderEntity cityBuilderServer = (CityBuilderEntity) serverPlayer.getWorld().getEntityById(entity.getId());
+                        if (!(serverPlayer.getWorld().getEntityById(entity.getId()) instanceof CityBuilderEntity cityBuilderServer)) return;
                         cityBuilderServer.stopFollowingPlayer();
                         // Teleport to the player first, should avoid getting stuck in ground
                         cityBuilderServer.requestTeleport(serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ());
                         // Now move to the well location
-                        cityBuilderServer.setTarget(playerKingdom.getPOIPos(KingdomPOI.CITY_BUILDER_WELL_POI));
+                        BlockPos well = playerKingdom.getPOIPos(KingdomPOI.CITY_BUILDER_WELL_POI);
+                        if (well != null) cityBuilderServer.setTarget(well);
                     });
                 });
                 player.playSoundToPlayer(TaleOfKingdoms.getAPI().getManager(SoundManager.class).getSound(SoundManager.TOKSound.TOKTHEME), SoundCategory.MUSIC, 0.1f, 1f);

@@ -28,6 +28,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
+import java.util.Optional;
+
 public class ConfirmUpgradeKingdomGui extends BaseCityBuilderScreen {
 
     private final PlayerEntity player;
@@ -75,26 +77,35 @@ public class ConfirmUpgradeKingdomGui extends BaseCityBuilderScreen {
                     return;
                 }
 
-                entity.getInventory().removeItem(Items.OAK_LOG, 320);
-                entity.getInventory().removeItem(Items.COBBLESTONE, 320);
-
                 final IntegratedServer server = MinecraftClient.getInstance().getServer();
                 final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
                 final PlayerKingdom kingdom = instance.getPlayer(player).getKingdom();
+                if (serverPlayer == null || kingdom == null || !(serverPlayer.getWorld().getEntityById(entity.getId()) instanceof CityBuilderEntity serverCityBuilder)) return;
+                if (serverCityBuilder.getWood() < 320 || serverCityBuilder.getStone() < 320) return;
                 final BlockPos origin = kingdom.getOrigin();
 
                 // Paste their kingdom
-                final KingdomTier next = KingdomTier.values()[kingdom.getTier().ordinal() + 1];
-                kingdom.setTier(next);
+                final Optional<KingdomTier> nextTier = kingdom.getTier().next();
+                if (nextTier.isEmpty() || !kingdom.beginConstruction()) return;
+                final KingdomTier next = nextTier.get();
 
                 // Tier 2 has +49 blocks on z axis
                 // +15 on x
                 final BlockPos offsetPos = origin.subtract(next.getOffset());
-                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(next.getSchematic(), serverPlayer, offsetPos).thenAccept(box -> {
+                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(next.getSchematic(), serverPlayer, offsetPos).whenComplete((box, error) -> {
+                    kingdom.finishConstruction();
+                    if (error != null) {
+                        TaleOfKingdoms.LOGGER.error("Failed to upgrade kingdom for {}", serverPlayer.getName().getString(), error);
+                        serverPlayer.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.upgrade_failed"), false);
+                        return;
+                    }
                     BlockPos start = new BlockPos(box.getMaxX(), box.getMaxY(), box.getMaxZ());
                     BlockPos end = new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ());
                     kingdom.setStart(start);
                     kingdom.setEnd(end);
+                    kingdom.setTier(next);
+                    serverCityBuilder.getInventory().removeItem(Items.OAK_LOG, 320);
+                    serverCityBuilder.getInventory().removeItem(Items.COBBLESTONE, 320);
                 });
                 player.playSoundToPlayer(TaleOfKingdoms.getAPI().getManager(SoundManager.class).getSound(SoundManager.TOKSound.TOKTHEME), SoundCategory.MUSIC, 0.1f, 1f);
             })

@@ -177,5 +177,7 @@
     "entity_type.taleofkingdoms.guildmaster.contract.cancel.await": "Guild Master: We await your participation, hero.",
 
     "entity_type.taleofkingdoms.villager.ask_to_work": "Villager: My king! Do you need a worker? Give me an axe and a pickaxe and I will work for you.",
-    "entity.taleofkingdoms.kingdom_villager": "Kingdom Villager"
+    "entity.taleofkingdoms.kingdom_villager": "Kingdom Villager",
+    "message.taleofkingdoms.kingdom.build_failed": "The kingdom could not be built. You can try again.",
+    "message.taleofkingdoms.kingdom.upgrade_failed": "The kingdom could not be upgraded. Your resources were not consumed."
 }
