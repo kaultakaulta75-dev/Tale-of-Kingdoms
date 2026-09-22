@@ -7,6 +7,7 @@ import com.convallyria.taleofkingdoms.common.event.PlayerJoinCallback;
 import com.convallyria.taleofkingdoms.common.event.PlayerJoinWorldCallback;
 import com.convallyria.taleofkingdoms.common.event.PlayerLeaveCallback;
 import com.convallyria.taleofkingdoms.common.event.tok.KingdomStartCallback;
+import com.convallyria.taleofkingdoms.common.generator.processor.GuildStructureProcessor;
 import com.convallyria.taleofkingdoms.common.listener.Listener;
 import com.convallyria.taleofkingdoms.common.schematic.Schematic;
 import com.convallyria.taleofkingdoms.common.schematic.SchematicOptions;
@@ -41,7 +42,17 @@ public class ServerGameInstanceListener extends Listener {
             Gson gson = api.getMod().getGson();
             Optional<ConquestInstance> savedInstance = ConquestInstance.load(conquestFile, gson);
             if (savedInstance.isPresent() && savedInstance.get().isLoaded()) {
-                api.getConquestInstanceStorage().addConquest(server.getLevelName(), savedInstance.get(), true);
+                ConquestInstance instance = savedInstance.get();
+                api.getConquestInstanceStorage().addConquest(server.getLevelName(), instance, true);
+                if (!instance.areGuildFieldsRestored()) {
+                    try {
+                        GuildStructureProcessor.restoreExistingFarms(server.getOverworld(), instance.getOrigin().down(21));
+                        instance.setGuildFieldsRestored(true);
+                        instance.save(server.getLevelName());
+                    } catch (Exception error) {
+                        TaleOfKingdoms.LOGGER.error("Unable to restore guild fields for {}", server.getLevelName(), error);
+                    }
+                }
             } else {
                 this.create(api, player, server);
             }

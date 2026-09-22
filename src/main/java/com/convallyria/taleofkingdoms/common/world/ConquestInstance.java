@@ -69,10 +69,12 @@ public class ConquestInstance {
                     BlockPos.CODEC.listOf().fieldOf("reficule_attack_locations").forGetter(ConquestInstance::getReficuleAttackLocations),
                     Uuids.CODEC.listOf().fieldOf("reficule_attackers").forGetter(ConquestInstance::getReficuleAttackers),
                     Uuids.CODEC.listOf().optionalFieldOf("lone_villagers_with_rooms").forGetter(ci -> Optional.of(ci.getLoneVillagersWithRooms())),
-                    Codec.unboundedMap(Uuids.CODEC, GuildPlayer.CODEC).fieldOf("guild_players").forGetter(ConquestInstance::getGuildPlayers)
-            ).apply(instance, (name, hasLoaded, start, end, origin, underAttack, attackLocations, attackers, lVWR, guildPlayers) -> {
+                    Codec.unboundedMap(Uuids.CODEC, GuildPlayer.CODEC).fieldOf("guild_players").forGetter(ConquestInstance::getGuildPlayers),
+                    Codec.BOOL.optionalFieldOf("guild_fields_restored", false).forGetter(ConquestInstance::areGuildFieldsRestored)
+            ).apply(instance, (name, hasLoaded, start, end, origin, underAttack, attackLocations, attackers, lVWR, guildPlayers, guildFieldsRestored) -> {
                 ConquestInstance conquestInstance = new ConquestInstance(name, start, end, origin);
                 conquestInstance.uploadData(start, end, hasLoaded, underAttack, attackLocations, attackers, lVWR.orElse(new ArrayList<>()), guildPlayers);
+                conquestInstance.setGuildFieldsRestored(guildFieldsRestored);
                 return conquestInstance;
             }
     ));
@@ -80,6 +82,7 @@ public class ConquestInstance {
     public void uploadData(ConquestInstance newData) {
         this.setOrigin(newData.origin);
         this.uploadData(newData.start, newData.end, newData.hasLoaded, newData.underAttack, newData.reficuleAttackLocations, newData.reficuleAttackers, newData.loneVillagersWithRooms, newData.guildPlayers);
+        this.setGuildFieldsRestored(newData.guildFieldsRestored);
     }
 
     public void uploadData(BlockPos start, BlockPos end, boolean hasLoaded, boolean underAttack, List<BlockPos> attackLocations, List<UUID> attackers, List<UUID> loneVillagersWithRooms, Map<UUID, GuildPlayer> guildPlayers) {
@@ -108,6 +111,7 @@ public class ConquestInstance {
     private BlockPos end;
     private BlockPos origin;
     private boolean underAttack;
+    private volatile boolean guildFieldsRestored;
     private final List<BlockPos> reficuleAttackLocations;
     private final List<UUID> reficuleAttackers;
     private List<UUID> loneVillagersWithRooms;
@@ -160,6 +164,14 @@ public class ConquestInstance {
 
     public void setLoaded(boolean loaded) {
         this.hasLoaded = loaded;
+    }
+
+    public boolean areGuildFieldsRestored() {
+        return guildFieldsRestored;
+    }
+
+    public void setGuildFieldsRestored(boolean guildFieldsRestored) {
+        this.guildFieldsRestored = guildFieldsRestored;
     }
 
     public BlockPos getStart() {

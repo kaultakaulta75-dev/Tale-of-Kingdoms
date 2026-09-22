@@ -95,7 +95,8 @@ public abstract class SchematicHandler {
                 if (kingdom == null) return;
                 structurePlacementData.addProcessor(new PlayerKingdomStructureProcessor(kingdom, player, options));
             });
-            structurePlacementData.addProcessor(new GuildStructureProcessor(options));
+            GuildStructureProcessor guildProcessor = new GuildStructureProcessor(schematic == Schematic.GUILD_CASTLE, options);
+            structurePlacementData.addProcessor(guildProcessor);
             structurePlacementData.addProcessor(JigsawReplacementStructureProcessor.INSTANCE);
             BlockPos placementPosition = Arrays.asList(options).contains(SchematicOptions.ALIGN_TO_TERRAIN)
                     ? alignToTerrain(schematic, player, structure, position, rotation)
@@ -110,6 +111,11 @@ public abstract class SchematicHandler {
             );
             if (!placed) {
                 throw new IllegalStateException("Minecraft rejected structure placement for " + schematic);
+            }
+            guildProcessor.restoreFarms(player.getServerWorld());
+            if (schematic == Schematic.GUILD_CASTLE) {
+                TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance()
+                        .ifPresent(instance -> instance.setGuildFieldsRestored(true));
             }
             cf.complete(structure.calculateBoundingBox(structurePlacementData, placementPosition));
         } catch (Exception error) {

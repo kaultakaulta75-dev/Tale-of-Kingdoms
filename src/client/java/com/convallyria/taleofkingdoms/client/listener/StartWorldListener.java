@@ -6,6 +6,7 @@ import com.convallyria.taleofkingdoms.client.TaleOfKingdomsClient;
 import com.convallyria.taleofkingdoms.client.gui.generic.ScreenContinueConquest;
 import com.convallyria.taleofkingdoms.client.gui.generic.ScreenStartConquest;
 import com.convallyria.taleofkingdoms.client.gui.generic.owo.update.UpdateScreen;
+import com.convallyria.taleofkingdoms.common.generator.processor.GuildStructureProcessor;
 import com.convallyria.taleofkingdoms.common.event.GameJoinCallback;
 import com.convallyria.taleofkingdoms.common.event.WorldSessionStartCallback;
 import com.convallyria.taleofkingdoms.common.event.WorldStopCallback;
@@ -83,6 +84,17 @@ public class StartWorldListener extends Listener {
                         if (api.getConquestInstanceStorage().getConquestInstance(worldName).isEmpty()) {
                             TaleOfKingdoms.LOGGER.info("Adding world: {}", worldName);
                             api.getConquestInstanceStorage().addConquest(worldName, instance, true);
+                        }
+                        if (!instance.areGuildFieldsRestored()) {
+                            api.executeOnServerEnvironment(server -> {
+                                try {
+                                    GuildStructureProcessor.restoreExistingFarms(server.getOverworld(), instance.getOrigin().down(21));
+                                    instance.setGuildFieldsRestored(true);
+                                    instance.save(worldName);
+                                } catch (Exception error) {
+                                    TaleOfKingdoms.LOGGER.error("Unable to restore guild fields for {}", worldName, error);
+                                }
+                            });
                         }
                     }
                 });
