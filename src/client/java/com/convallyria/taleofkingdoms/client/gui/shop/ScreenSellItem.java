@@ -2,25 +2,16 @@ package com.convallyria.taleofkingdoms.client.gui.shop;
 
 import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.TaleOfKingdomsAPI;
-import com.convallyria.taleofkingdoms.common.entity.EntityTypes;
-import com.convallyria.taleofkingdoms.common.entity.ShopEntity;
-import com.convallyria.taleofkingdoms.common.packet.Packets;
-import com.convallyria.taleofkingdoms.common.packet.c2s.ToggleSellGuiPacket;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.block.Blocks;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.render.GameRenderer;
-import net.minecraft.entity.EntityType;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
 
 import java.util.Optional;
 
@@ -71,29 +62,4 @@ public class ScreenSellItem extends HandledScreen<ScreenHandler> {
         titleX = (backgroundWidth - textRenderer.getWidth(title)) / 2;
     }
 
-    @Override
-    public void close() {
-        final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
-        api.getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
-            World world = playerInventory.player.getWorld();
-            for (EntityType<? extends ShopEntity> shopEntity : EntityTypes.SHOP_ENTITIES) {
-                instance.search(playerInventory.player, world, shopEntity).ifPresent(entity -> deleteBlock(api, entity));
-            }
-        });
-        super.close();
-    }
-
-    protected void deleteBlock(TaleOfKingdomsAPI api, ShopEntity entity) {
-        if (MinecraftClient.getInstance().getServer() == null) {
-            api.getClientPacket(Packets.TOGGLE_SELL_GUI)
-                    .sendPacket(playerInventory.player, new ToggleSellGuiPacket(true, entity.getGUIType()));
-            return;
-        }
-
-        api.getScheduler().queue(server -> {
-            BlockPos pos = entity.getBlockPos().add(0, 2, 0);
-            server.getOverworld().setBlockState(pos, Blocks.AIR.getDefaultState());
-        }, 1);
-    }
 }
-

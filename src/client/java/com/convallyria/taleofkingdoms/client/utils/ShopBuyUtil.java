@@ -15,25 +15,29 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 @Environment(EnvType.CLIENT)
 public class ShopBuyUtil {
 
     public static void buyItem(ConquestInstance instance, PlayerEntity player, ShopItem shopItem, int count, ShopEntity entity) {
+        if (shopItem == null || count < 1 || count > 64) return;
         if (shopItem.canBuy(instance, player, count)) {
             final TaleOfKingdomsClientAPI api = TaleOfKingdomsClient.getAPI();
-            api.executeOnMain(() -> {
-                MinecraftServer server = MinecraftClient.getInstance().getServer();
-                if (server == null) {
-                    api.getClientPacket(Packets.BUY_ITEM)
-                            .sendPacket(player, new BuyItemPacket(Registries.ITEM.getId(shopItem.getItem().asItem()).toString(), count, entity.getGUIType()));
-                    return;
-                }
+            if (MinecraftClient.getInstance().getServer() == null) {
+                api.getClientPacket(Packets.BUY_ITEM)
+                        .sendPacket(player, new BuyItemPacket(Registries.ITEM.getId(shopItem.getItem().asItem()).toString(), count, entity.getGUIType()));
+                return;
+            }
 
+            api.executeOnServerEnvironment(server -> {
                 ServerPlayerEntity serverPlayerEntity = server.getPlayerManager().getPlayer(player.getUuid());
                 if (serverPlayerEntity != null) {
+                    long calculatedCost = (long) shopItem.getCost() * count;
+                    if (calculatedCost <= 0 || calculatedCost > Integer.MAX_VALUE) return;
+                    int cost = (int) calculatedCost;
+                    final GuildPlayer guildPlayer = instance.getPlayer(serverPlayerEntity);
+                    if (guildPlayer == null || !guildPlayer.trySpendCoins(cost)) return;
                     final ItemStack stack = new ItemStack(shopItem.getItem(), count);
                     final PlayerInventory inventory = serverPlayerEntity.getInventory();
                     int slotWithRoom = inventory.getOccupiedSlotWithRoomForStack(stack);
@@ -43,10 +47,8 @@ public class ShopBuyUtil {
                         serverPlayerEntity.dropItem(stack, true, true);
                     } else {
                         inventory.insertStack(slotWithRoom, stack);
+                        if (!stack.isEmpty()) serverPlayerEntity.dropItem(stack, false);
                     }
-                    int cost = shopItem.getCost() * count;
-                    final GuildPlayer guildPlayer = instance.getPlayer(player);
-                    guildPlayer.setCoins(guildPlayer.getCoins() - cost);
                 }
             });
         }

@@ -10,8 +10,7 @@ import com.convallyria.taleofkingdoms.common.entity.ai.goal.ImprovedFollowTarget
 import com.convallyria.taleofkingdoms.common.utils.InventoryUtils;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
-import com.convallyria.taleofkingdoms.server.TaleOfKingdomsServerAPI;
-import net.fabricmc.api.EnvType;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.ai.goal.ActiveTargetGoal;
@@ -28,8 +27,8 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.tag.ItemTags;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.world.World;
@@ -87,53 +86,56 @@ public class GuildMasterDefenderEntity extends GuildMasterEntity {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND || !(player instanceof ServerPlayerEntity serverPlayerEntity)) return ActionResult.FAIL;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient()) return ActionResult.SUCCESS;
+        if (!(player instanceof ServerPlayerEntity serverPlayerEntity)) return ActionResult.FAIL;
         TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
-        ConquestInstance instance = api.getConquestInstanceStorage().mostRecentInstance().get();
+        if (api == null) return ActionResult.FAIL;
+        Optional<ConquestInstance> optionalInstance = api.getConquestInstanceStorage().mostRecentInstance();
+        if (optionalInstance.isEmpty()) return ActionResult.FAIL;
+        ConquestInstance instance = optionalInstance.get();
         if (instance.isUnderAttack()) {
             Set<Item> swords = Set.of(Items.IRON_SWORD, Items.STONE_SWORD, Items.DIAMOND_SWORD, Items.GOLDEN_SWORD, Items.WOODEN_SWORD, Items.NETHERITE_SWORD);
-            if (!givenSword && !player.getInventory().containsAny(swords)) { // Use containsAny method as it is present on both server and client
-                Runnable giveItem = () -> {
-                    MinecraftServer server = player.getServer();
-                    if (server != null) {
-                        serverPlayerEntity.getInventory().insertStack(new ItemStack(Items.IRON_SWORD));
-                        this.givenSword = true;
-                    }
-                };
-                api.executeOnMain(giveItem);
+            if (!givenSword && !player.getInventory().containsAny(swords)) {
+                ItemStack sword = new ItemStack(Items.IRON_SWORD);
+                serverPlayerEntity.getInventory().insertStack(sword);
+                if (!sword.isEmpty()) serverPlayerEntity.dropItem(sword, false);
+                this.givenSword = true;
                 return ActionResult.SUCCESS;
             }
 
             if (instance.getReficuleAttackers().isEmpty()) {
                 final GuildPlayer guildPlayer = instance.getPlayer(player);
-                if (!guildPlayer.hasRebuiltGuild() && guildPlayer.getWorthiness() >= 750 && guildPlayer.getKingdom() == null) {
-                    Runnable fixGuild = () -> {
-                        PlayerInventory playerInventory = serverPlayerEntity.getInventory();
-                        ItemStack stack = null;
-                        for (ItemStack itemStack : playerInventory.main) {
-                            if (itemStack.isIn(ItemTags.LOGS)) {
-                                if (itemStack.getCount() == 64) {
-                                    stack = itemStack;
-                                    break;
-                                }
-                            }
+                if (guildPlayer != null && !guildPlayer.hasRebuiltGuild()
+                        && guildPlayer.getWorthiness() >= GuildQuestProgression.DEFEND_GUILD_WORTHINESS
+                        && guildPlayer.getKingdom() == null) {
+                    PlayerInventory playerInventory = serverPlayerEntity.getInventory();
+                    if (InventoryUtils.count(playerInventory, ItemTags.LOGS) >= 64) {
+                        if (!instance.beginGuildRebuild()) return ActionResult.SUCCESS;
+                        if (!InventoryUtils.remove(playerInventory, ItemTags.LOGS, 64)) {
+                            instance.finishGuildRebuild();
+                            return ActionResult.SUCCESS;
                         }
-
-                        if (stack != null) {
-                            playerInventory.setStack(InventoryUtils.getSlotWithStack(playerInventory, stack), new ItemStack(Items.AIR));
-                            instance.rebuild(serverPlayerEntity, api);
+                        instance.rebuild(serverPlayerEntity, api).whenComplete((box, error) -> {
+                            instance.finishGuildRebuild();
+                            if (error != null) {
+                                ItemStack refund = new ItemStack(Items.OAK_LOG, 64);
+                                playerInventory.insertStack(refund);
+                                if (!refund.isEmpty()) serverPlayerEntity.dropItem(refund, false);
+                                serverPlayerEntity.sendMessage(Text.translatable("message.taleofkingdoms.guild.rebuild_failed"), false);
+                                TaleOfKingdoms.LOGGER.error("Guild defender rebuild failed for {}", serverPlayerEntity.getName().getString(), error);
+                                return;
+                            }
                             guildPlayer.setHasRebuiltGuild(true);
                             instance.setUnderAttack(false);
                             final Entity entity = serverPlayerEntity.getWorld().getEntityById(this.getId());
-                            entity.requestTeleport(entity.getX(), entity.getY() + 100, entity.getZ());
-                            entity.remove(RemovalReason.DISCARDED);
-                            Translations.GUILDMASTER_THANK_YOU.send(player);
-                        } else {
-                            Translations.GUILDMASTER_REBUILD.send(player);
-                        }
-                    };
-                    if (TaleOfKingdoms.getAPI().getEnvironment() == EnvType.SERVER) ((TaleOfKingdomsServerAPI) api).executeOnDedicatedServer(fixGuild);
-                    else if (serverPlayerEntity.getServer() == null || !serverPlayerEntity.getServer().isDedicated()) api.executeOnMain(fixGuild);
+                            if (entity != null) entity.remove(Entity.RemovalReason.DISCARDED);
+                            Translations.GUILDMASTER_THANK_YOU.send(serverPlayerEntity);
+                            serverPlayerEntity.sendMessage(GuildQuestProgression.getCurrentObjective(instance, guildPlayer), false);
+                        });
+                    } else {
+                        Translations.GUILDMASTER_REBUILD.send(serverPlayerEntity);
+                    }
                     return ActionResult.SUCCESS;
                 }
             } else if (instance.getReficuleAttackers().size() <= 4) {

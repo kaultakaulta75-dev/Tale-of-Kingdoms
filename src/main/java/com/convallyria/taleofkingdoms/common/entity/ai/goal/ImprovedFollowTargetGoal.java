@@ -1,11 +1,10 @@
 package com.convallyria.taleofkingdoms.common.entity.ai.goal;
 
-import com.convallyria.taleofkingdoms.common.entity.guild.GuildGuardEntity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.TargetPredicate;
 import net.minecraft.entity.ai.goal.TrackTargetGoal;
 import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Box;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,14 +16,14 @@ public class ImprovedFollowTargetGoal<T extends LivingEntity> extends TrackTarge
     protected final EntityType<T> entityType;
     protected final int reciprocalChance;
     protected LivingEntity targetEntity;
-    protected TargetPredicate targetPredicate;
+    private final @Nullable Predicate<LivingEntity> extraPredicate;
 
     public ImprovedFollowTargetGoal(MobEntity mob, EntityType<T> entityType, boolean checkVisibility) {
         this(mob, entityType, checkVisibility, false);
     }
 
     public ImprovedFollowTargetGoal(MobEntity mob, EntityType<T> entityType, boolean checkVisibility, boolean checkCanNavigate) {
-        this(mob, entityType, 10, checkVisibility, checkCanNavigate, entity -> entity instanceof GuildGuardEntity);
+        this(mob, entityType, 10, checkVisibility, checkCanNavigate, null);
     }
 
     public ImprovedFollowTargetGoal(MobEntity mob, EntityType<T> entityType, int reciprocalChance, boolean checkVisibility, boolean checkCanNavigate, @Nullable Predicate<LivingEntity> targetPredicate) {
@@ -32,7 +31,7 @@ public class ImprovedFollowTargetGoal<T extends LivingEntity> extends TrackTarge
         this.entityType = entityType;
         this.reciprocalChance = reciprocalChance;
         this.setControls(EnumSet.of(Control.TARGET));
-        this.targetPredicate = (TargetPredicate.createAttackable()).setBaseMaxDistance(this.getFollowRange()).setPredicate(targetPredicate);
+        this.extraPredicate = targetPredicate;
     }
 
     @Override
@@ -50,27 +49,20 @@ public class ImprovedFollowTargetGoal<T extends LivingEntity> extends TrackTarge
     }
 
     protected void findClosestTarget() {
-        if (this.entityType != EntityType.PLAYER) {
-            Box box = this.getSearchBox(this.getFollowRange());
-            List<T> entities = this.mob.getWorld().getEntitiesByType(entityType, box, entity -> {
-                if (checkVisibility) return mob.canSee(entity);
-                return true;
-            });
-            LivingEntity current = null;
-            for (T entity : entities) {
-                if (current == null) {
-                    current = entity;
-                    continue;
-                }
-
-                if (entity.squaredDistanceTo(mob) < current.squaredDistanceTo(mob)) {
-                    current = entity;
-                }
+        Box box = this.getSearchBox(this.getFollowRange());
+        List<T> entities = this.mob.getWorld().getEntitiesByType(entityType, box, entity -> {
+            if (!entity.isAlive()) return false;
+            if (entity instanceof PlayerEntity player && (player.isCreative() || player.isSpectator())) return false;
+            if (extraPredicate != null && !extraPredicate.test(entity)) return false;
+            return !checkVisibility || mob.canSee(entity);
+        });
+        LivingEntity current = null;
+        for (T entity : entities) {
+            if (current == null || entity.squaredDistanceTo(mob) < current.squaredDistanceTo(mob)) {
+                current = entity;
             }
-            this.targetEntity = current;
-        } else {
-            this.targetEntity = this.mob.getWorld().getClosestPlayer(this.mob.getX(), this.mob.getEyeY(), this.mob.getZ(), this.getFollowRange(), true);
         }
+        this.targetEntity = current;
     }
 
     @Override

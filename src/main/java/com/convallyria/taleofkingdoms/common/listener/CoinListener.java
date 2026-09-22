@@ -3,12 +3,14 @@ package com.convallyria.taleofkingdoms.common.listener;
 import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.common.entity.generic.HunterEntity;
 import com.convallyria.taleofkingdoms.common.entity.guild.GuildGuardEntity;
+import com.convallyria.taleofkingdoms.common.entity.kingdom.warden.WardenHireable;
 import com.convallyria.taleofkingdoms.common.event.EntityDeathCallback;
 import com.convallyria.taleofkingdoms.common.event.EntityPickupItemCallback;
 import com.convallyria.taleofkingdoms.common.event.ItemMergeCallback;
 import com.convallyria.taleofkingdoms.common.item.ItemHelper;
 import com.convallyria.taleofkingdoms.common.item.ItemRegistry;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -52,11 +54,11 @@ public class CoinListener extends Listener {
     private void dropCoinsOnDeath() {
         EntityDeathCallback.EVENT.register((source, entity) -> {
             TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
-                PlayerEntity playerEntity = null;
                 if (entity instanceof PlayerEntity) {
                     final GuildPlayer guildPlayer = instance.getPlayer(entity.getUuid());
-                    int subtract = (guildPlayer.getCoins() / 20);
-                    guildPlayer.setCoins(guildPlayer.getCoins() - subtract);
+                    if (guildPlayer == null) return;
+                    int subtract = guildPlayer.getCoins() / 20;
+                    if (subtract > 0) guildPlayer.trySpendCoins(subtract);
                     return;
                 }
 
@@ -72,37 +74,48 @@ public class CoinListener extends Listener {
 
                 if (source.getSource() instanceof PlayerEntity
                         || source.getSource() instanceof HunterEntity
+                        || source.getSource() instanceof WardenHireable
                         || source.getSource() instanceof GuildGuardEntity
                         || source.getSource() instanceof ProjectileEntity) {
-                    if (source.getSource() instanceof ProjectileEntity projectileEntity) {
-                        if (projectileEntity.getOwner() instanceof PlayerEntity) {
-                            playerEntity = (PlayerEntity) projectileEntity.getOwner();
-                        }
+                    if (source.getSource() instanceof ProjectileEntity projectileEntity
+                            && !(projectileEntity.getOwner() instanceof PlayerEntity)
+                            && !(projectileEntity.getOwner() instanceof HunterEntity)
+                            && !(projectileEntity.getOwner() instanceof WardenHireable)) return;
 
-                        if (!(projectileEntity.getOwner() instanceof PlayerEntity)
-                                && !(projectileEntity.getOwner() instanceof HunterEntity)) {
-                            return;
-                        }
-                    } else if (source.getSource() instanceof PlayerEntity) {
-                        playerEntity = (PlayerEntity) source.getSource();
-                    }
-
-                    //TODO associate owner with hunter entity
                     ItemHelper.dropCoins(entity);
 
-                    if (source.getSource() instanceof PlayerEntity) {
-                        final GuildPlayer guildPlayer = instance.getPlayer(source.getSource().getUuid());
-                        guildPlayer.setWorthiness(guildPlayer.getWorthiness() + (getMobWorthiness(entity) * getDifficultyWorthinessMultiplier(source.getSource().getWorld())));
-                    }
-
-                    if (playerEntity instanceof ServerPlayerEntity serverPlayerEntity) {
-                        instance.attack(serverPlayerEntity, serverPlayerEntity.getServerWorld());
+                    ServerPlayerEntity responsiblePlayer = getResponsiblePlayer(source.getSource());
+                    if (responsiblePlayer != null) {
+                        int reward = getMobWorthiness(entity) * getDifficultyWorthinessMultiplier(responsiblePlayer.getWorld());
+                        GuildQuestProgression.rewardWorthiness(instance, responsiblePlayer, reward);
                         if (TaleOfKingdoms.getAPI().getEnvironment() == EnvType.SERVER)
-                            ServerConquestInstance.sync(serverPlayerEntity, instance);
+                            ServerConquestInstance.sync(responsiblePlayer, instance);
                     }
                 }
             });
         });
+    }
+
+    private ServerPlayerEntity getResponsiblePlayer(Entity sourceEntity) {
+        if (sourceEntity instanceof ServerPlayerEntity serverPlayer) return serverPlayer;
+        if (sourceEntity instanceof ProjectileEntity projectile) {
+            if (projectile.getOwner() instanceof ServerPlayerEntity serverPlayer) return serverPlayer;
+            if (projectile.getOwner() instanceof HunterEntity hunter) return getHunterOwner(hunter);
+            if (projectile.getOwner() instanceof WardenHireable soldier) return getSoldierOwner(soldier);
+        }
+        if (sourceEntity instanceof HunterEntity hunter) return getHunterOwner(hunter);
+        if (sourceEntity instanceof WardenHireable soldier) return getSoldierOwner(soldier);
+        return null;
+    }
+
+    private ServerPlayerEntity getHunterOwner(HunterEntity hunter) {
+        if (hunter.getOwnerUuid() == null || hunter.getServer() == null) return null;
+        return hunter.getServer().getPlayerManager().getPlayer(hunter.getOwnerUuid());
+    }
+
+    private ServerPlayerEntity getSoldierOwner(WardenHireable soldier) {
+        if (soldier.getOwnerUuid() == null || soldier.getServer() == null) return null;
+        return soldier.getServer().getPlayerManager().getPlayer(soldier.getOwnerUuid());
     }
 
     private void coinPickup() {
@@ -110,7 +123,7 @@ public class CoinListener extends Listener {
             if (equalsCoin(item)) {
                 TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
                     Random random = ThreadLocalRandom.current();
-                    instance.addCoins(player.getUuid(), random.nextInt(5));
+                    instance.addCoins(player.getUuid(), random.nextInt(1, 6));
                     if (TaleOfKingdoms.getAPI().getEnvironment() == EnvType.SERVER) {
                         ServerConquestInstance.sync((ServerPlayerEntity) player, instance);
                     }
@@ -135,20 +148,21 @@ public class CoinListener extends Listener {
         File configDirectory = new File("config/" + TaleOfKingdoms.MODID);
         File externalFile = new File(configDirectory, internalFile.getName());
 
-        if (configDirectory.mkdir() || configDirectory.exists()) {
-            InputStream fileSrc = Thread.currentThread().getContextClassLoader().getResourceAsStream(internalFile.getPath());
-
-            try {
-                if (externalFile.createNewFile()) {
+        try {
+            Files.createDirectories(configDirectory.toPath());
+            if (!externalFile.isFile()) {
+                try (InputStream fileSrc = Thread.currentThread().getContextClassLoader().getResourceAsStream(internalFile.getPath())) {
+                    if (fileSrc == null) throw new IOException("Missing bundled worthiness.json");
                     Files.copy(fileSrc, externalFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 }
-
-                Reader reader = Files.newBufferedReader(externalFile.toPath());
-
-                worthinessJson = new Gson().fromJson(reader, JsonObject.class);
-            } catch (IOException | JsonParseException e) {
-                e.printStackTrace();
             }
+
+            try (Reader reader = Files.newBufferedReader(externalFile.toPath())) {
+                worthinessJson = new Gson().fromJson(reader, JsonObject.class);
+            }
+        } catch (IOException | JsonParseException error) {
+            TaleOfKingdoms.LOGGER.error("Unable to load worthiness configuration", error);
+            worthinessJson = new JsonObject();
         }
     }
 
@@ -160,7 +174,7 @@ public class CoinListener extends Listener {
     public int getMobWorthiness(Entity mob) {
         String mobType = mob.getType().getName().getString();
 
-        if(worthinessJson.has(mobType)) {
+        if(worthinessJson != null && worthinessJson.has(mobType)) {
             return worthinessJson.get(mobType).getAsInt();
         } else {
             return 1;
@@ -173,6 +187,7 @@ public class CoinListener extends Listener {
      * @return the difficulty's worthiness if and only if the entry exists, else 1
      */
     public int getDifficultyWorthinessMultiplier(World world) {
+        if (worthinessJson == null || !worthinessJson.has("difficulty")) return 1;
         JsonObject difficulty = worthinessJson.getAsJsonObject("difficulty");
 
         if(difficulty.has(world.getDifficulty().getName())) {

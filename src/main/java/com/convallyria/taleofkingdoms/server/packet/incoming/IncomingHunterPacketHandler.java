@@ -9,16 +9,14 @@ import com.convallyria.taleofkingdoms.common.packet.c2s.HireHunterPacket;
 import com.convallyria.taleofkingdoms.common.packet.context.PacketContext;
 import com.convallyria.taleofkingdoms.common.utils.EntityUtils;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
-import com.convallyria.taleofkingdoms.server.TaleOfKingdomsServer;
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-@Environment(EnvType.SERVER)
 public final class IncomingHunterPacketHandler extends InServerPacketHandler<HireHunterPacket> {
 
     public IncomingHunterPacketHandler() {
@@ -31,6 +29,10 @@ public final class IncomingHunterPacketHandler extends InServerPacketHandler<Hir
         boolean retire = packet.retire();
         context.taskQueue().execute(() -> TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
             final GuildPlayer guildPlayer = instance.getPlayer(player);
+            if (guildPlayer == null) {
+                reject(player, "Player has no conquest data.");
+                return;
+            }
             if (!instance.isInGuild(player)) {
                 reject(player, "Not in guild.");
                 return;
@@ -43,27 +45,34 @@ public final class IncomingHunterPacketHandler extends InServerPacketHandler<Hir
                 return;
             }
 
-            if (guildPlayer.getCoins() == 0 && guildPlayer.getBankerCoins() == 0) {
-                reject(player, "No coins.");
-                return;
-            }
-
             if (retire) {
                 if (guildPlayer.getHunters().isEmpty()) {
                     reject(player, "No hunters to retire.");
                     return;
                 }
 
-                HunterEntity hunterEntity = (HunterEntity) player.getServerWorld().getEntity(guildPlayer.getHunters().get(0));
-                //TODO we need to match client logic here
+                HunterEntity hunterEntity = null;
+                for (UUID hunterId : List.copyOf(guildPlayer.getHunters())) {
+                    Entity storedEntity = player.getServerWorld().getEntity(hunterId);
+                    if (storedEntity instanceof HunterEntity hunter && hunter.isAlive() && !hunter.isRemoved()) {
+                        hunterEntity = hunter;
+                        break;
+                    }
+                    guildPlayer.getHunters().remove(hunterId);
+                    TaleOfKingdoms.LOGGER.info("Removed stale hunter reference {} for {}", hunterId, player.getName().getString());
+                }
                 if (hunterEntity == null) {
                     reject(player, "Hunter entity returned null.");
+                    ServerConquestInstance.sync(player, instance);
                     return;
                 }
 
-                TaleOfKingdomsServer.getAPI().executeOnDedicatedServer(() -> hunterEntity.remove(Entity.RemovalReason.DISCARDED));
+                if (!guildPlayer.tryCreditCoins(750)) {
+                    reject(player, "Unable to refund hunter.");
+                    return;
+                }
+                hunterEntity.remove(Entity.RemovalReason.DISCARDED);
                 guildPlayer.getHunters().remove(hunterEntity.getUuid());
-                guildPlayer.setCoins(guildPlayer.getCoins() + 750);
                 ServerConquestInstance.sync(player, instance);
                 return;
             }
@@ -74,8 +83,17 @@ public final class IncomingHunterPacketHandler extends InServerPacketHandler<Hir
             }
 
             HunterEntity hunterEntity = EntityUtils.spawnEntity(EntityTypes.HUNTER, player, entity.get().getBlockPos());
+            if (hunterEntity == null) {
+                reject(player, "Hunter entity could not be spawned.");
+                return;
+            }
+            if (!guildPlayer.trySpendCoins(1500)) {
+                hunterEntity.remove(Entity.RemovalReason.DISCARDED);
+                reject(player, "Unable to charge hunter cost.");
+                return;
+            }
+            hunterEntity.setOwner(player);
             guildPlayer.getHunters().add(hunterEntity.getUuid());
-            guildPlayer.setCoins(guildPlayer.getCoins() - 1500);
             ServerConquestInstance.sync(player, instance);
         }));
     }

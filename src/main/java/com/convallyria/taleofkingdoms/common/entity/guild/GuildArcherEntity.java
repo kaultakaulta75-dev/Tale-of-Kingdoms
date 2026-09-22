@@ -20,6 +20,9 @@ import net.minecraft.entity.ai.goal.ActiveTargetGoal;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.data.TrackedData;
+import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.mob.PathAwareEntity;
@@ -41,9 +44,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class GuildArcherEntity extends TOKEntity implements CrossbowUser, RangedAttackMob, States {
+
+    private static final TrackedData<Boolean> CHARGING = DataTracker.registerData(GuildArcherEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
 
     private static final List<Identifier> VALID_SKINS = List.of(
             /*identifier("textures/entity/guildarcher/guildarcherone.png"),*/
@@ -51,29 +55,32 @@ public class GuildArcherEntity extends TOKEntity implements CrossbowUser, Ranged
             identifier("textures/entity/guildarcher/guildarcherthree.png")
     );
 
-    private boolean charging;
     private boolean ticked;
 
-    private final Identifier skin;
+    @Override
+    protected void initDataTracker(DataTracker.Builder builder) {
+        super.initDataTracker(builder);
+        builder.add(CHARGING, false);
+    }
 
     public GuildArcherEntity(EntityType<? extends PathAwareEntity> entityType, World world) {
         super(entityType, world);
-        this.skin = VALID_SKINS.get(ThreadLocalRandom.current().nextInt(VALID_SKINS.size()));
+        randomizeSkinVariant(VALID_SKINS.size());
     }
 
     @Override
     public Optional<Identifier> getSkin() {
-        return Optional.of(skin);
+        return Optional.of(VALID_SKINS.get(getSkinVariant(VALID_SKINS.size())));
     }
 
     @Environment(EnvType.CLIENT)
     public boolean isCharging() {
-        return charging;
+        return this.dataTracker.get(CHARGING);
     }
 
     @Override
     public void setCharging(boolean charging) {
-        this.charging = charging;
+        this.dataTracker.set(CHARGING, charging);
     }
 
     @Override
@@ -95,13 +102,14 @@ public class GuildArcherEntity extends TOKEntity implements CrossbowUser, Ranged
     @Override
     public EntityData initialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason spawnReason, @Nullable EntityData entityData) {
         EntityData entityReturnData = super.initialize(world, difficulty, spawnReason, entityData);
-        int value = ThreadLocalRandom.current().nextInt(2);
+        int value = this.random.nextInt(2);
         this.setStackInHand(Hand.MAIN_HAND, new ItemStack(value == 1 ? Items.BOW : Items.CROSSBOW));
         if (this.getStackInHand(Hand.MAIN_HAND).getItem() == Items.BOW) {
             this.goalSelector.add(1, new BowAttackGoal<>(this, 0.6D, 15, 8.0F));
         } else {
             this.goalSelector.add(1, new CrossbowAttackGoal<>(this, 0.6D, 12.0F));
         }
+        this.ticked = true;
         return entityReturnData;
     }
 
@@ -141,10 +149,9 @@ public class GuildArcherEntity extends TOKEntity implements CrossbowUser, Ranged
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND || !player.getWorld().isClient()) return ActionResult.FAIL;
-        //TODO
-        Translations.GUILDMEMBER_START.send(player);
-        return ActionResult.PASS;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (!player.getWorld().isClient()) Translations.GUILDMEMBER_START.send(player);
+        return ActionResult.SUCCESS;
     }
 
     @Override

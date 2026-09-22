@@ -1,6 +1,7 @@
 package com.convallyria.taleofkingdoms.common.entity.guild;
 
 import com.convallyria.taleofkingdoms.TaleOfKingdoms;
+import com.convallyria.taleofkingdoms.TaleOfKingdomsAPI;
 import com.convallyria.taleofkingdoms.common.entity.TOKEntity;
 import com.convallyria.taleofkingdoms.common.entity.ai.goal.WanderAroundGuildGoal;
 import com.convallyria.taleofkingdoms.common.packet.Packets;
@@ -32,19 +33,23 @@ public class InnkeeperEntity extends TOKEntity {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND || player.getWorld().isClient()) return ActionResult.FAIL;
-        ConquestInstance instance = TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().get();
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient()) return ActionResult.SUCCESS;
+
+        TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
+        if (api == null || api.getConquestInstanceStorage().mostRecentInstance().isEmpty()) return ActionResult.FAIL;
+        ConquestInstance instance = api.getConquestInstanceStorage().mostRecentInstance().get();
         final GuildPlayer guildPlayer = instance.getPlayer(player.getUuid());
-        if (!guildPlayer.hasSignedContract()) {
+        if (guildPlayer == null || !guildPlayer.hasSignedContract()) {
             Translations.NEED_CONTRACT.send(player);
-            return ActionResult.FAIL;
+            return ActionResult.SUCCESS;
         }
 
-        if (player instanceof ServerPlayerEntity) {
-            TaleOfKingdoms.getAPI().getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.INNKEEPER, this.getId()));
+        if (player instanceof ServerPlayerEntity serverPlayer) {
+            api.getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(serverPlayer, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.INNKEEPER, this.getId()));
         }
 
-        return ActionResult.PASS;
+        return ActionResult.SUCCESS;
     }
 
     // Disable jumping

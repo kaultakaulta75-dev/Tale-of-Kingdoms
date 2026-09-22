@@ -3,16 +3,21 @@ package com.convallyria.taleofkingdoms.common.shop;
 import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.TaleOfKingdomsAPI;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import net.fabricmc.api.EnvType;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.item.ItemStack;
+import net.minecraft.screen.NamedScreenHandlerFactory;
 import net.minecraft.screen.ScreenHandler;
+import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,7 +47,12 @@ public class SellScreenHandler extends ScreenHandler {
         int m;
         int l;
         // Our inventory
-        this.addSlot(new Slot(inventory, 0, 116, 35));
+        this.addSlot(new Slot(inventory, 0, 116, 35) {
+            @Override
+            public boolean canInsert(ItemStack stack) {
+                return false;
+            }
+        });
         //The player inventory
         for (m = 0; m < 3; ++m) {
             for (l = 0; l < 9; ++l) {
@@ -55,6 +65,13 @@ public class SellScreenHandler extends ScreenHandler {
         }
     }
 
+    public static NamedScreenHandlerFactory createFactory() {
+        return new SimpleNamedScreenHandlerFactory(
+                (syncId, playerInventory, player) -> new SellScreenHandler(syncId, playerInventory, new SimpleInventory(1)),
+                Text.translatable("menu.taleofkingdoms.shop.sell")
+        );
+    }
+
     @Override
     public boolean canUse(PlayerEntity player) {
         return this.inventory.canPlayerUse(player);
@@ -65,8 +82,10 @@ public class SellScreenHandler extends ScreenHandler {
      */
     @Override
     public void onSlotClick(int slotIndex, int clickData, SlotActionType actionType, PlayerEntity playerEntity) {
-        if (slotIndex == 0) {
+        if (slotIndex == 0 && actionType == SlotActionType.PICKUP && (clickData == 0 || clickData == 1)) {
             ItemStack itemStack = playerEntity.currentScreenHandler.getCursorStack();
+            if (itemStack.isEmpty()) return;
+
             final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
             if (api == null) return;
             Optional<ConquestInstance> instance = api.getConquestInstanceStorage().mostRecentInstance();
@@ -77,33 +96,40 @@ public class SellScreenHandler extends ScreenHandler {
                     if (itemStack.getItem() != shopItem.getItem()) continue;
                     if (shopItem.getSell() <= 0) continue;
 
-                    int itemStackCount = itemStack.getCount();
+                    int itemStackCount = clickData == 0 ? itemStack.getCount() : 1;
+                    long proceeds = (long) shopItem.getSell() * itemStackCount;
+                    if (proceeds <= 0 || proceeds > Integer.MAX_VALUE) return;
 
-                    if(clickData == 0) {
+                    // The handler runs on both logical sides. Only the authoritative server may
+                    // mutate the wallet; this also prevents double payment in an integrated server.
+                    if (!playerEntity.getWorld().isClient()) {
+                        GuildPlayer guildPlayer = instance.get().getGuildPlayers().get(playerEntity.getUuid());
+                        if (guildPlayer == null || !guildPlayer.tryCreditCoins((int) proceeds)) return;
+                        if (playerEntity instanceof ServerPlayerEntity serverPlayer && api.getEnvironment() == EnvType.SERVER) {
+                            ServerConquestInstance.sync(serverPlayer, instance.get());
+                        }
+                    }
+
+                    if (clickData == 0) {
                         // Only set empty once we've found the item... and that the item is a valid sell item and that they left-clicked on the slot
                         playerEntity.currentScreenHandler.setCursorStack(ItemStack.EMPTY);
                     } else {
-                        // Else assume it is right click (will include middle and extra mouse button clicks)
-                        // and only take 1
-                        itemStack.setCount(itemStackCount - 1);
-                        itemStackCount = 1;
+                        itemStack.decrement(1);
                         playerEntity.currentScreenHandler.setCursorStack(itemStack);
                     }
-
-                    // Don't run on local server if we're in a client environment
-                    // Otherwise, the coins will get added twice.
-                    if (playerEntity instanceof ServerPlayerEntity && TaleOfKingdoms.getAPI().getEnvironment() == EnvType.CLIENT) {
-                        return;
-                    }
-
-                    // Issue #59
-                    instance.get().addCoins(playerEntity.getUuid(), shopItem.getSell() * itemStackCount);
                     return;
                 }
             }
             return;
         }
+        if (slotIndex == 0) return;
         super.onSlotClick(slotIndex, clickData, actionType, playerEntity);
+    }
+
+    @Override
+    public void onClosed(PlayerEntity player) {
+        super.onClosed(player);
+        inventory.onClose(player);
     }
 
     // Shift + Player Inv Slot

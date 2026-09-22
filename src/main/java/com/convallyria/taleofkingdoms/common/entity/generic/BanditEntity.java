@@ -20,6 +20,9 @@ import net.minecraft.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.entity.ai.goal.WanderAroundGoal;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.data.TrackedData;
+import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.mob.PathAwareEntity;
@@ -42,9 +45,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class BanditEntity extends TOKEntity implements CrossbowUser, RangedAttackMob, States, Monster {
+
+    private static final TrackedData<Boolean> CHARGING = DataTracker.registerData(BanditEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
 
     public static final List<Identifier> VALID_SKINS = List.of(
             identifier("textures/entity/bandit/archer_tok.png"),
@@ -79,17 +83,22 @@ public class BanditEntity extends TOKEntity implements CrossbowUser, RangedAttac
         }
     };
 
-    private boolean charging;
     private boolean ticked;
+
+    @Override
+    protected void initDataTracker(DataTracker.Builder builder) {
+        super.initDataTracker(builder);
+        builder.add(CHARGING, false);
+    }
 
     @Environment(EnvType.CLIENT)
     public boolean isCharging() {
-        return charging;
+        return this.dataTracker.get(CHARGING);
     }
 
     @Override
     public void setCharging(boolean charging) {
-        this.charging = charging;
+        this.dataTracker.set(CHARGING, charging);
     }
 
     @Override
@@ -97,16 +106,14 @@ public class BanditEntity extends TOKEntity implements CrossbowUser, RangedAttac
         this.despawnCounter = 0;
     }
 
-    private final Identifier skin;
-
     public BanditEntity(@NotNull EntityType<? extends PathAwareEntity> entityType, @NotNull World world) {
         super(entityType, world);
-        this.skin = VALID_SKINS.get(ThreadLocalRandom.current().nextInt(VALID_SKINS.size()));
+        randomizeSkinVariant(VALID_SKINS.size());
     }
 
     @Override
     public Optional<Identifier> getSkin() {
-        return Optional.of(skin);
+        return Optional.of(VALID_SKINS.get(getSkinVariant(VALID_SKINS.size())));
     }
 
     @Nullable
@@ -146,7 +153,7 @@ public class BanditEntity extends TOKEntity implements CrossbowUser, RangedAttac
         this.targetSelector.add(6, new ImprovedFollowTargetGoal<>(this, EntityTypes.GUILDGUARD, true));
         this.targetSelector.add(7, new ImprovedFollowTargetGoal<>(this, EntityTypes.GUILDARCHER, true));
         this.targetSelector.add(8, new ImprovedFollowTargetGoal<>(this, EntityTypes.GUILDVILLAGER, true));
-        this.targetSelector.add(4, new ActiveTargetGoal<>(this, MobEntity.class, 100, true, true, livingEntity -> livingEntity instanceof Monster && !(livingEntity instanceof BanditEntity)));
+        this.targetSelector.add(9, new ActiveTargetGoal<>(this, MobEntity.class, 100, true, true, livingEntity -> livingEntity instanceof Monster && !(livingEntity instanceof BanditEntity)));
         this.goalSelector.add(2, new WanderAroundGoal(this, 0.6D));
         applyEntityAI();
     }

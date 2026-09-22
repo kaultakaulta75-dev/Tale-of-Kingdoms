@@ -11,6 +11,7 @@ import net.minecraft.util.math.Vec3d;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumSet;
+import java.util.Optional;
 
 public class WanderAroundGuildGoal extends Goal {
 
@@ -40,6 +41,21 @@ public class WanderAroundGuildGoal extends Goal {
 
     @Override
     public boolean canStart() {
+        final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
+        if (api == null) return false;
+        Optional<ConquestInstance> optionalInstance = api.getConquestInstanceStorage().mostRecentInstance();
+        if (optionalInstance.isEmpty()) return false;
+        ConquestInstance instance = optionalInstance.get();
+
+        if (!instance.isInGuild(this.mob.getBlockPos())) {
+            Vec3d centre = instance.getCentre();
+            this.targetX = centre.x;
+            this.targetY = centre.y;
+            this.targetZ = centre.z;
+            this.ignoringChance = false;
+            return true;
+        }
+
        if (!this.ignoringChance) {
            // if (this.field_24463 && this.mob.getDespawnCounter() >= 100) {
              //   return false;
@@ -54,14 +70,8 @@ public class WanderAroundGuildGoal extends Goal {
         if (vec3d == null) {
             return false;
         } else {
-            final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
-            if (api != null) {
-                if (api.getConquestInstanceStorage().mostRecentInstance().isPresent()) {
-                    ConquestInstance instance = api.getConquestInstanceStorage().mostRecentInstance().get();
-                    BlockPos blockPos = new BlockPos((int) vec3d.x, (int) vec3d.y, (int) vec3d.z);
-                    if (!instance.isInGuild(blockPos)) return false;
-                }
-            }
+            BlockPos blockPos = BlockPos.ofFloored(vec3d.x, vec3d.y, vec3d.z);
+            if (!instance.isInGuild(blockPos)) return false;
 
             this.targetX = vec3d.x;
             this.targetY = vec3d.y;

@@ -10,6 +10,7 @@ import com.mojang.serialization.MapCodec;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.StructureBlock;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
 import net.minecraft.structure.StructurePlacementData;
@@ -24,8 +25,11 @@ import net.minecraft.world.WorldView;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 public class GuildStructureProcessor extends StructureProcessor {
 
@@ -33,6 +37,7 @@ public class GuildStructureProcessor extends StructureProcessor {
     public static final MapCodec<GuildStructureProcessor> CODEC = MapCodec.unit(() -> INSTANCE);
 
     private final List<SchematicOptions> options;
+    private final Set<UUID> assignedEntities = new HashSet<>();
 
     public GuildStructureProcessor(SchematicOptions... options) {
         this.options = Arrays.asList(options);
@@ -59,27 +64,49 @@ public class GuildStructureProcessor extends StructureProcessor {
             if (options.contains(SchematicOptions.NO_ENTITIES)) return air;
 
             Vec3d spawnPos = currentBlockInfo.pos().toCenterPos();
-            final EntityType type = Registries.ENTITY_TYPE.getOrEmpty(Identifier.of(TaleOfKingdoms.MODID, metadata)).orElse(null);
+            @SuppressWarnings("unchecked")
+            final EntityType<? extends MobEntity> type = (EntityType<? extends MobEntity>) Registries.ENTITY_TYPE
+                    .getOrEmpty(Identifier.of(TaleOfKingdoms.MODID, metadata)).orElse(null);
             if (type == null) {
                 TaleOfKingdoms.LOGGER.error("Unable to find entity {}", metadata);
                 return air;
             }
 
             if (options.contains(SchematicOptions.IGNORE_DEFENDERS)
-                    && (type == EntityTypes.GUILDGUARD || type == EntityTypes.GUILDARCHER || type == EntityTypes.GUILDVILLAGER)) {
+                    && (type.equals(EntityTypes.GUILDGUARD) || type.equals(EntityTypes.GUILDARCHER) || type.equals(EntityTypes.GUILDVILLAGER))) {
                 return air;
             }
 
-            if (type != EntityTypes.GUILDGUARD && type != EntityTypes.GUILDARCHER && type != EntityTypes.GUILDVILLAGER) {
-                Optional guildEntity = instance.get().getGuildEntity(serverWorldAccess.toServerWorld(), type);
-                if (type == EntityTypes.GUILDMASTER) {
+            BlockPos entityPosition = BlockPos.ofFloored(spawnPos);
+            boolean repeatedType = type.equals(EntityTypes.GUILDGUARD)
+                    || type.equals(EntityTypes.GUILDARCHER)
+                    || type.equals(EntityTypes.GUILDVILLAGER);
+            if (!repeatedType) {
+                Optional<? extends MobEntity> guildEntity = instance.get().getGuildEntity(serverWorldAccess.toServerWorld(), type);
+                if (type.equals(EntityTypes.GUILDMASTER)) {
                     guildEntity = instance.get().getGuildMaster(serverWorldAccess.toServerWorld());
                 }
 
                 if (guildEntity.isEmpty()) {
-                    EntityUtils.spawnEntity(type, serverWorldAccess, BlockPos.ofFloored(spawnPos));
+                    EntityUtils.spawnEntity(type, serverWorldAccess, entityPosition);
+                } else {
+                    guildEntity.get().requestTeleport(spawnPos.x, spawnPos.y, spawnPos.z);
                 }
-            } else EntityUtils.spawnEntity(type, serverWorldAccess, BlockPos.ofFloored(spawnPos));
+            } else {
+                Optional<? extends MobEntity> reusable = instance.get().getGuildEntities(serverWorldAccess.toServerWorld(), type).stream()
+                        .filter(entity -> !assignedEntities.contains(entity.getUuid()))
+                        .min((first, second) -> Double.compare(
+                                first.squaredDistanceTo(spawnPos.x, spawnPos.y, spawnPos.z),
+                                second.squaredDistanceTo(spawnPos.x, spawnPos.y, spawnPos.z)));
+                if (reusable.isPresent()) {
+                    MobEntity entity = reusable.get();
+                    assignedEntities.add(entity.getUuid());
+                    entity.requestTeleport(spawnPos.x, spawnPos.y, spawnPos.z);
+                } else {
+                    MobEntity spawned = EntityUtils.spawnEntity(type, serverWorldAccess, entityPosition);
+                    if (spawned != null) assignedEntities.add(spawned.getUuid());
+                }
+            }
             return air;
         }
         return currentBlockInfo;

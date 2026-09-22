@@ -31,50 +31,51 @@ public class WardenEntity extends TOKEntity {
         this.setStackInHand(Hand.MAIN_HAND, new ItemStack(Items.IRON_SWORD));
     }
 
-    public void buySoldier(PlayerEntity player, ConquestInstance instance, byte index) {
+    public boolean buySoldier(ServerPlayerEntity player, ConquestInstance instance, byte index) {
+        if (index != 1 && index != 2) return false;
         final GuildPlayer guildPlayer = instance.getPlayer(player);
-        final int coins = guildPlayer.getCoins();
-        if (coins < 1000) return;
+        if (guildPlayer == null || guildPlayer.getCoins() < 1000) return false;
 
         final PlayerKingdom kingdom = guildPlayer.getKingdom();
-        if (kingdom == null) return;
+        if (kingdom == null) return false;
 
-        guildPlayer.setCoins(coins - 1000);
-
-        EntityType<? extends WardenHireable> type = index == 1 ? EntityTypes.WARRIOR : EntityTypes.ARCHER; // TODO
-        TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
-            ServerPlayerEntity serverPlayerEntity = player instanceof ServerPlayerEntity ? (ServerPlayerEntity) player
-                    : server.getPlayerManager().getPlayer(player.getUuid());
-            if (serverPlayerEntity == null) return;
-            final WardenHireable wardenHireable = EntityUtils.spawnEntity(type, serverPlayerEntity, this.getBlockPos());
-            wardenHireable.toggleFollowGoal(player);
-        });
+        EntityType<? extends WardenHireable> type = index == 1 ? EntityTypes.WARRIOR : EntityTypes.ARCHER;
+        final WardenHireable soldier = EntityUtils.spawnEntity(type, player, this.getBlockPos());
+        if (soldier == null) return false;
+        if (!guildPlayer.trySpendCoins(1000)) {
+            soldier.remove(Entity.RemovalReason.DISCARDED);
+            return false;
+        }
+        soldier.setOwner(player);
+        soldier.toggleFollowGoal(player);
+        return true;
     }
 
-    public void recallSoldiers(PlayerEntity player, ConquestInstance instance) {
+    public int recallSoldiers(ServerPlayerEntity player, ConquestInstance instance) {
         final GuildPlayer guildPlayer = instance.getPlayer(player);
+        if (guildPlayer == null) return 0;
         final PlayerKingdom kingdom = guildPlayer.getKingdom();
-        if (kingdom == null) return;
+        if (kingdom == null) return 0;
 
-        TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
-            ServerPlayerEntity serverPlayerEntity = player instanceof ServerPlayerEntity ? (ServerPlayerEntity) player
-                    : server.getPlayerManager().getPlayer(player.getUuid());
-            for (Entity entity : serverPlayerEntity.getServerWorld().iterateEntities()) {
-                if (!(entity instanceof WardenHireable wardenHireable)) continue;
-                entity.requestTeleport(this.getX(), this.getY(), this.getZ());
-                if (!wardenHireable.isFollowingPlayer()) wardenHireable.toggleFollowGoal(serverPlayerEntity);
-            }
-        });
+        int recalled = 0;
+        for (Entity entity : player.getServerWorld().iterateEntities()) {
+            if (!(entity instanceof WardenHireable soldier) || !soldier.isOwnedBy(player)) continue;
+            entity.requestTeleport(this.getX(), this.getY(), this.getZ());
+            if (!soldier.isFollowingPlayer()) soldier.toggleFollowGoal(player);
+            recalled++;
+        }
+        return recalled;
     }
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient()) return ActionResult.SUCCESS;
         final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
         if (api == null) return ActionResult.FAIL;
         if (api.getConquestInstanceStorage().mostRecentInstance().isEmpty()) return ActionResult.FAIL;
-        if (hand == Hand.OFF_HAND || player.getWorld().isClient()) return ActionResult.FAIL;
-        TaleOfKingdoms.getAPI().getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.WARDEN, this.getId()));
-        return ActionResult.PASS;
+        api.getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.WARDEN, this.getId()));
+        return ActionResult.SUCCESS;
     }
 
     @Override

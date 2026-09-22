@@ -22,6 +22,7 @@ import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingHunterPacke
 import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingInnkeeperPacketHandler;
 import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingToggleSellGuiPacketHandler;
 import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingUpgradeKingdomPacketHandler;
+import com.convallyria.taleofkingdoms.client.packet.outgoing.OutgoingWardenActionPacketHandler;
 import com.convallyria.taleofkingdoms.common.kingdom.PlayerKingdom;
 import com.convallyria.taleofkingdoms.common.packet.PacketHandler;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
@@ -127,6 +128,7 @@ public class TaleOfKingdomsClient implements ClientModInitializer {
         registerHandler(new OutgoingInnkeeperPacketHandler());
         registerHandler(new OutgoingToggleSellGuiPacketHandler());
         registerHandler(new OutgoingUpgradeKingdomPacketHandler());
+        registerHandler(new OutgoingWardenActionPacketHandler());
 
         registerHandler(new IncomingInstanceSyncPacketHandler());
         registerHandler(new IncomingOpenScreenPacketHandler());
@@ -155,5 +157,21 @@ public class TaleOfKingdomsClient implements ClientModInitializer {
                 });
             });
         }, 20, 1000);
+
+        // A normal world stop still performs a final save. This periodic checkpoint
+        // limits lost conquest progress if the integrated server or game crashes.
+        api.getScheduler().repeating(server -> {
+            if (startWorldListener == null) return;
+            String worldName = startWorldListener.getWorldName();
+            if (worldName == null) return;
+            api.getConquestInstanceStorage().getConquestInstance(worldName).ifPresent(instance -> {
+                if (!instance.isLoaded() || instance.isGuildRebuildInProgress()) return;
+                boolean constructing = instance.getGuildPlayers().values().stream()
+                        .map(guildPlayer -> guildPlayer.getKingdom())
+                        .filter(java.util.Objects::nonNull)
+                        .anyMatch(PlayerKingdom::isConstructionInProgress);
+                if (!constructing) instance.save(worldName);
+            });
+        }, 2400, 2400);
     }
 }

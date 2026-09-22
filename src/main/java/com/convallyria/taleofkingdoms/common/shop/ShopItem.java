@@ -41,7 +41,9 @@ public class ShopItem {
 
     public boolean canBuy(ConquestInstance instance, PlayerEntity player, int count) {
         final GuildPlayer guildPlayer = instance.getPlayer(player);
-        return guildPlayer.getCoins() >= ((getCost() * modifier) * count);
+        if (guildPlayer == null || count <= 0) return false;
+        long totalCost = (long) getCost() * count;
+        return totalCost <= Integer.MAX_VALUE && guildPlayer.getCoins() >= totalCost;
     }
 
     @Override

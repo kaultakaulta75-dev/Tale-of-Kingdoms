@@ -14,6 +14,7 @@ import com.convallyria.taleofkingdoms.common.packet.c2s.CityBuilderActionPacket;
 import com.convallyria.taleofkingdoms.common.translation.Translations;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import io.wispforest.owo.ui.component.ButtonComponent;
 import io.wispforest.owo.ui.component.Components;
 import io.wispforest.owo.ui.container.FlowLayout;
@@ -29,7 +30,6 @@ import net.minecraft.text.Text;
 import net.minecraft.util.DyeColor;
 import net.minecraft.util.Identifier;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +63,7 @@ public class CityBuilderTierGui extends BaseCityBuilderScreen {
         final PlayerKingdom kingdom = guildPlayer.getKingdom();
         AtomicInteger cobblestoneCount = new AtomicInteger(entity.getStone());
         AtomicInteger oakWoodCount = new AtomicInteger(entity.getWood());
-        fixWholeKingdomButton.active(cobblestoneCount.get() == 320 && oakWoodCount.get() == 320);
+        fixWholeKingdomButton.active(cobblestoneCount.get() >= 320 && oakWoodCount.get() >= 320);
 
         final float oakWoodPercent = oakWoodCount.get() * (100f / 320f);
         final float cobblestonePercent = cobblestoneCount.get() * (100f / 320f);
@@ -75,9 +75,18 @@ public class CityBuilderTierGui extends BaseCityBuilderScreen {
         buildButtons.forEach((build, button) -> button.active(entity.canAffordBuild(kingdom, build) && kingdom.getTier() == build.getTier()));
 
         final boolean isMaxed = kingdom.getTier().isMaximum();
-        final boolean hasBuiltRequired = Arrays.stream(BuildCosts.values()).noneMatch(cost -> kingdom.getTier() == cost.getTier() && !kingdom.hasBuilt(cost));
-        final boolean hasResources = entity.getWood() == 320 && entity.getStone() == 320;
-        this.tierUpgradeButton.active(!isMaxed && hasBuiltRequired && hasResources);
+        final boolean hasBuiltRequired = kingdom.hasCompletedTier(kingdom.getTier());
+        final boolean hasResources = entity.getWood() >= 320 && entity.getStone() >= 320;
+        final KingdomTier nextTier = kingdom.getTier().next().orElse(kingdom.getTier());
+        final boolean hasQuestProgress = !isMaxed && GuildQuestProgression.canUpgradeTo(instance, guildPlayer, nextTier);
+        this.tierUpgradeButton.active(!isMaxed && hasBuiltRequired && hasResources && hasQuestProgress);
+        this.tierUpgradeButton.tooltip(List.of(
+                Text.translatable("menu.taleofkingdoms.citybuilder.upgrade_worthiness",
+                        guildPlayer.getWorthiness(), nextTier.getRequiredWorthiness()),
+                Text.translatable("menu.taleofkingdoms.citybuilder.upgrade_buildings", hasBuiltRequired ? "✓" : "✗"),
+                Text.translatable("menu.taleofkingdoms.citybuilder.upgrade_resources",
+                        entity.getWood(), entity.getStone())
+        ));
     }
 
     @Override
@@ -165,16 +174,24 @@ public class CityBuilderTierGui extends BaseCityBuilderScreen {
         );
 
         final boolean isMaxed = kingdom.getTier().isMaximum();
-        final boolean hasBuiltRequired = Arrays.stream(BuildCosts.values()).noneMatch(cost -> kingdom.getTier() == cost.getTier() && !kingdom.hasBuilt(cost));
-        final boolean hasResources = entity.getWood() == 320 && entity.getStone() == 320;
+        final boolean hasBuiltRequired = kingdom.hasCompletedTier(kingdom.getTier());
+        final boolean hasResources = entity.getWood() >= 320 && entity.getStone() >= 320;
         final KingdomTier nextTier = kingdom.getTier().next().orElse(kingdom.getTier());
+        final boolean hasQuestProgress = !isMaxed && GuildQuestProgression.canUpgradeTo(instance, guildPlayer, nextTier);
         inner.child(
             this.tierUpgradeButton = (ButtonComponent) Components.button(Text
                             .translatable("menu.taleofkingdoms.generic.build")
                             .append(" ").append(nextTier.getName()), c -> {
                     MinecraftClient.getInstance().setScreen(new ConfirmUpgradeKingdomGui(player, entity, instance));
                 })
-                .active(!isMaxed && hasBuiltRequired && hasResources)
+                .active(!isMaxed && hasBuiltRequired && hasResources && hasQuestProgress)
+                .tooltip(List.of(
+                        Text.translatable("menu.taleofkingdoms.citybuilder.upgrade_worthiness",
+                                guildPlayer.getWorthiness(), nextTier.getRequiredWorthiness()),
+                        Text.translatable("menu.taleofkingdoms.citybuilder.upgrade_buildings", hasBuiltRequired ? "✓" : "✗"),
+                        Text.translatable("menu.taleofkingdoms.citybuilder.upgrade_resources",
+                                entity.getWood(), entity.getStone())
+                ))
                 .positioning(Positioning.relative(80, 90)).sizing(Sizing.fixed(100), Sizing.fixed(20))
         );
 

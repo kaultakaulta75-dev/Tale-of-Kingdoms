@@ -8,9 +8,14 @@ import net.minecraft.entity.ai.goal.LookAroundGoal;
 import net.minecraft.entity.ai.goal.SwimGoal;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.data.TrackedData;
+import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.NotNull;
@@ -19,12 +24,31 @@ import java.util.Optional;
 
 public abstract class TOKEntity extends PathAwareEntity implements MultiSkinned {
 
+    private static final TrackedData<Integer> SKIN_VARIANT = DataTracker.registerData(TOKEntity.class, TrackedDataHandlerRegistry.INTEGER);
+
     protected TOKEntity(@NotNull EntityType<? extends PathAwareEntity> entityType, @NotNull World world) {
         super(entityType, world);
     }
 
     protected static Identifier identifier(String path) {
         return Identifier.of(TaleOfKingdoms.MODID, path);
+    }
+
+    @Override
+    protected void initDataTracker(DataTracker.Builder builder) {
+        super.initDataTracker(builder);
+        builder.add(SKIN_VARIANT, 0);
+    }
+
+    protected void randomizeSkinVariant(int variantCount) {
+        if (variantCount > 1 && !this.getWorld().isClient()) {
+            this.dataTracker.set(SKIN_VARIANT, this.random.nextInt(variantCount));
+        }
+    }
+
+    protected int getSkinVariant(int variantCount) {
+        if (variantCount <= 1) return 0;
+        return Math.floorMod(this.dataTracker.get(SKIN_VARIANT), variantCount);
     }
 
     @Override
@@ -113,5 +137,19 @@ public abstract class TOKEntity extends PathAwareEntity implements MultiSkinned 
 
     public GoalSelector getGoalSelector() {
         return this.goalSelector;
+    }
+
+    @Override
+    public void writeCustomDataToNbt(NbtCompound nbt) {
+        super.writeCustomDataToNbt(nbt);
+        nbt.putInt("TokSkinVariant", this.dataTracker.get(SKIN_VARIANT));
+    }
+
+    @Override
+    public void readCustomDataFromNbt(NbtCompound nbt) {
+        super.readCustomDataFromNbt(nbt);
+        if (nbt.contains("TokSkinVariant", NbtElement.INT_TYPE)) {
+            this.dataTracker.set(SKIN_VARIANT, nbt.getInt("TokSkinVariant"));
+        }
     }
 }

@@ -12,6 +12,7 @@ import com.convallyria.taleofkingdoms.common.schematic.SchematicOptions;
 import com.convallyria.taleofkingdoms.common.translation.Translations;
 import com.convallyria.taleofkingdoms.common.utils.EntityUtils;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import com.google.gson.Gson;
 import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
@@ -114,6 +115,7 @@ public class ConquestInstance {
     private final Map<UUID, GuildPlayer> guildPlayers;
 
     private transient boolean didUpgrade;
+    private transient boolean guildRebuildInProgress;
 
     public ConquestInstance(String name, BlockPos start, BlockPos end, BlockPos origin) {
         this.name = name;
@@ -132,6 +134,20 @@ public class ConquestInstance {
 
     public void setDidUpgrade(boolean didUpgrade) {
         this.didUpgrade = didUpgrade;
+    }
+
+    public synchronized boolean beginGuildRebuild() {
+        if (guildRebuildInProgress) return false;
+        guildRebuildInProgress = true;
+        return true;
+    }
+
+    public synchronized void finishGuildRebuild() {
+        guildRebuildInProgress = false;
+    }
+
+    public synchronized boolean isGuildRebuildInProgress() {
+        return guildRebuildInProgress;
     }
 
     public String getName() {
@@ -179,7 +195,10 @@ public class ConquestInstance {
         if (player.getWorld().getRegistryKey() != World.OVERWORLD) return false;
         final GuildPlayer guildPlayer = guildPlayers.get(player.getUuid());
         if (guildPlayer == null) return false;
-        return guildPlayer.getWorthiness() >= (1500.0F / 2) && !isUnderAttack() && !guildPlayer.hasRebuiltGuild();
+        return guildPlayer.hasSignedContract()
+                && guildPlayer.getWorthiness() >= GuildQuestProgression.DEFEND_GUILD_WORTHINESS
+                && !isUnderAttack()
+                && !guildPlayer.hasRebuiltGuild();
     }
     
     /**
@@ -190,13 +209,23 @@ public class ConquestInstance {
     public boolean hasAttacked(UUID uuid) {
         final GuildPlayer guildPlayer = guildPlayers.get(uuid);
         if (guildPlayer == null) return false;
-        return !isUnderAttack() && guildPlayer.getWorthiness() > 750 && guildPlayer.hasRebuiltGuild();
+        return !isUnderAttack()
+                && guildPlayer.getWorthiness() >= GuildQuestProgression.DEFEND_GUILD_WORTHINESS
+                && guildPlayer.hasRebuiltGuild();
     }
 
     public void attack(PlayerEntity player, ServerWorldAccess world) {
         if (canAttack(player)) {
             TaleOfKingdoms.LOGGER.info("Initiating guild attack for player {}", player.getName());
-            EntityUtils.spawnEntity(EntityTypes.GUILDMASTER_DEFENDER, world, player.getBlockPos());
+            Optional<GuildMasterEntity> currentGuildMaster = getGuildMaster(world.toServerWorld());
+            BlockPos defenderPosition = currentGuildMaster
+                    .map(Entity::getBlockPos)
+                    .orElseGet(() -> BlockPos.ofFloored(getCentre()));
+            if (EntityUtils.spawnEntity(EntityTypes.GUILDMASTER_DEFENDER, world, defenderPosition) == null) {
+                TaleOfKingdoms.LOGGER.error("Unable to spawn the defending Guild Master at {}", defenderPosition);
+                return;
+            }
+            currentGuildMaster.ifPresent(entity -> entity.remove(Entity.RemovalReason.DISCARDED));
             this.underAttack = true;
             Translations.GUILDMASTER_HELP.send(player);
 
@@ -268,19 +297,23 @@ public class ConquestInstance {
     public void addCoins(UUID uuid, int coins) {
         final GuildPlayer player = getPlayer(uuid);
         if (player == null) return;
-        player.setCoins(player.getCoins() + coins);
+        player.tryCreditCoins(coins);
     }
 
     public Optional<GuildMasterEntity> getGuildMaster(World world) {
         if (start == null || end == null) return Optional.empty();
         Box box = Box.enclosing(getStart(), getEnd());
-        return world.getEntitiesByType(EntityTypes.GUILDMASTER, box, guildMaster -> !guildMaster.isFireImmune()).stream().findFirst();
+        return world.getEntitiesByType(EntityTypes.GUILDMASTER, box, guildMaster -> true).stream().findFirst();
     }
 
     public <T extends Entity> Optional<T> getGuildEntity(World world, EntityType<T> type) {
-        if (start == null || end == null) return Optional.empty();
+        return getGuildEntities(world, type).stream().findFirst();
+    }
+
+    public <T extends Entity> List<T> getGuildEntities(World world, EntityType<T> type) {
+        if (start == null || end == null) return List.of();
         Box box = Box.enclosing(getStart(), getEnd());
-        return world.getEntitiesByType(type, box, entity -> true).stream().findFirst();
+        return world.getEntitiesByType(type, box, Entity::isAlive);
     }
 
     private List<BlockPos> validRest;

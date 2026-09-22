@@ -5,6 +5,7 @@ import com.convallyria.taleofkingdoms.common.entity.kingdom.ForemanEntity;
 import com.convallyria.taleofkingdoms.common.packet.Packets;
 import com.convallyria.taleofkingdoms.common.packet.c2s.ForemanBuyWorkerPacket;
 import com.convallyria.taleofkingdoms.common.packet.context.PacketContext;
+import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
@@ -25,7 +26,9 @@ public final class IncomingForemanBuyWorkerPacketHandler extends InServerPacketH
                 return;
             }
 
-            foremanEntity.buyWorker(player, instance);
+            foremanEntity.buyWorker(player, instance).thenAccept(success -> {
+                if (success) ServerConquestInstance.sync(player, instance);
+            });
         }));
     }
 }

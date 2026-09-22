@@ -27,8 +27,12 @@ public class FollowPlayerGoal extends Goal {
     private final float maxDistance;
 
     public FollowPlayerGoal(MobEntity mob, double speed, float minDistance, float maxDistance) {
+        this(mob, speed, minDistance, maxDistance, Objects::nonNull);
+    }
+
+    public FollowPlayerGoal(MobEntity mob, double speed, float minDistance, float maxDistance, Predicate<PlayerEntity> targetPredicate) {
         this.mob = mob;
-        this.targetPredicate = Objects::nonNull;
+        this.targetPredicate = targetPredicate;
         this.speed = speed;
         this.navigation = mob.getNavigation();
         this.minDistance = minDistance;
@@ -45,17 +49,21 @@ public class FollowPlayerGoal extends Goal {
             if (!movementVaried.isMovementEnabled()) return false;
         }
 
-        List<PlayerEntity> list = this.mob.getWorld().getEntitiesByClass(PlayerEntity.class, this.mob.getBoundingBox().expand(this.maxDistance), this.targetPredicate);
-        if (!list.isEmpty()) {
-            for (PlayerEntity playerEntity : list) {
-                if (!playerEntity.isInvisible()) {
-                    this.target = playerEntity;
-                    return true;
-                }
-            }
+        this.target = null;
+        List<PlayerEntity> list = this.mob.getWorld().getEntitiesByClass(
+                PlayerEntity.class,
+                this.mob.getBoundingBox().expand(this.maxDistance),
+                player -> player.isAlive() && !player.isSpectator() && this.targetPredicate.test(player)
+        );
+        double closestDistance = Double.MAX_VALUE;
+        for (PlayerEntity player : list) {
+            if (player.isInvisible()) continue;
+            double distance = this.mob.squaredDistanceTo(player);
+            if (distance <= this.minDistance * this.minDistance || distance >= closestDistance) continue;
+            this.target = player;
+            closestDistance = distance;
         }
-
-        return false;
+        return this.target != null;
     }
 
     @Override
@@ -64,7 +72,12 @@ public class FollowPlayerGoal extends Goal {
         if (this.mob instanceof MovementVaried movementVaried) {
             if (!movementVaried.isMovementEnabled()) flag = false;
         }
-        return flag && this.target != null && !this.navigation.isIdle() && this.mob.squaredDistanceTo(this.target) > (double)(this.minDistance * this.minDistance);
+        return flag
+                && this.target != null
+                && this.target.isAlive()
+                && this.targetPredicate.test((PlayerEntity) this.target)
+                && !this.navigation.isIdle()
+                && this.mob.squaredDistanceTo(this.target) > (double)(this.minDistance * this.minDistance);
     }
 
     @Override
@@ -91,18 +104,13 @@ public class FollowPlayerGoal extends Goal {
                 double e = this.mob.getY() - this.target.getY();
                 double f = this.mob.getZ() - this.target.getZ();
                 double g = d * d + e * e + f * f;
-                if (g > (double)(this.minDistance * this.minDistance)) {
+                if (g > (double) (maxDistance * maxDistance)) {
+                    this.navigation.stop();
+                    this.mob.teleport(target.getX(), target.getY(), target.getZ(), true);
+                } else if (g > (double)(this.minDistance * this.minDistance)) {
                     this.navigation.startMovingTo(this.target, this.speed);
-                    if (g > (maxDistance * maxDistance)) {
-                        this.mob.teleport(target.getX(), target.getY(), target.getZ(), true);
-                    }
                 } else {
                     this.navigation.stop();
-                    if (g <= (double)this.minDistance || target.getX() == this.mob.getX() && target.getY() == this.mob.getY() && target.getZ() == this.mob.getZ()) {
-                        double h = this.target.getX() - this.mob.getX();
-                        double i = this.target.getZ() - this.mob.getZ();
-                        this.navigation.startMovingTo(this.mob.getX() - h, this.mob.getY(), this.mob.getZ() - i, this.speed);
-                    }
                 }
             }
         }

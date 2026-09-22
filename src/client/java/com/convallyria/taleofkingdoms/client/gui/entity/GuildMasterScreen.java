@@ -20,6 +20,7 @@ import com.convallyria.taleofkingdoms.common.utils.EntityUtils;
 import com.convallyria.taleofkingdoms.common.utils.InventoryUtils;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -30,7 +31,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -77,47 +77,48 @@ public class GuildMasterScreen extends ScreenTOK {
         this.addDrawableChild(ButtonWidget.builder(Text.translatable("menu.taleofkingdoms.guild_master.retire_hunter"), widget -> {
             if (guildPlayer.getHunters().isEmpty()) {
                 Translations.GUILDMASTER_NOHUNTER.send(player);
-            } else {
-                if (!guildPlayer.getHunters().isEmpty()) {
-                    Translations.HUNTER_THANK.send(player);
-                    if (MinecraftClient.getInstance().getServer() == null) {
-                        TaleOfKingdomsClient.getAPI().getClientPacket(Packets.HIRE_HUNTER)
-                                .sendPacket(player, new HireHunterPacket(true));
-                        this.close();
-                        return;
-                    }
-
-                    ServerWorld serverWorld = MinecraftClient.getInstance().getServer().getOverworld();
-                    final List<UUID> list = List.copyOf(guildPlayer.getHunters());
-                    for (UUID uuid : list) {
-                        HunterEntity hunter = (HunterEntity) serverWorld.getEntity(uuid);
-                        if (hunter == null) {
-                            guildPlayer.getHunters().remove(uuid);
-                            TaleOfKingdoms.LOGGER.info("Removed hunter by uuid " + uuid + " that no longer exists.");
-                        } else {
-                            TaleOfKingdoms.getAPI().executeOnServerEnvironment((s) -> hunter.remove(Entity.RemovalReason.DISCARDED));
-                            guildPlayer.getHunters().remove(hunter.getUuid());
-                            guildPlayer.setCoins(guildPlayer.getCoins() + 750);
-                            return;
-                        }
-                    }
-                    guildPlayer.getHunters().clear();
-                    guildPlayer.getHunters().addAll(list);
-                    player.sendMessage(Text.literal("Unable to find an alive hunter!"), false);
-                    return;
-                } else {
-                    Translations.GUILDMASTER_NOHUNTER.send(player);
-                }
+                this.close();
+                return;
             }
+
+            if (MinecraftClient.getInstance().getServer() == null) {
+                Translations.HUNTER_THANK.send(player);
+                TaleOfKingdomsClient.getAPI().getClientPacket(Packets.HIRE_HUNTER)
+                        .sendPacket(player, new HireHunterPacket(true));
+                this.close();
+                return;
+            }
+
+            TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
+                ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                if (serverPlayer == null) return;
+                GuildPlayer serverGuildPlayer = instance.getPlayer(serverPlayer);
+                if (serverGuildPlayer == null) return;
+
+                final List<UUID> hunters = List.copyOf(serverGuildPlayer.getHunters());
+                for (UUID uuid : hunters) {
+                    Entity storedEntity = serverPlayer.getServerWorld().getEntity(uuid);
+                    if (!(storedEntity instanceof HunterEntity hunter) || !hunter.isAlive() || hunter.isRemoved()) {
+                        serverGuildPlayer.getHunters().remove(uuid);
+                        TaleOfKingdoms.LOGGER.info("Removed stale hunter {} for {}", uuid, serverPlayer.getName().getString());
+                        continue;
+                    }
+                    if (!serverGuildPlayer.tryCreditCoins(750)) return;
+                    hunter.remove(Entity.RemovalReason.DISCARDED);
+                    serverGuildPlayer.getHunters().remove(hunter.getUuid());
+                    Translations.HUNTER_THANK.send(serverPlayer);
+                    return;
+                }
+                serverPlayer.sendMessage(Text.translatable("message.taleofkingdoms.hunter.not_found"), false);
+            });
             this.close();
         }).dimensions(this.width / 2 - 75, this.height / 2, 150, 20).build());
 
         PlayerInventory clientPlayerInventory = player.getInventory();
-        ItemStack stack = InventoryUtils.getStack(clientPlayerInventory, ItemTags.LOGS, 64);
         final ButtonWidget fixWidget = this.addDrawableChild(ButtonWidget.builder(Text.translatable("menu.taleofkingdoms.guild_master.fix_guild"), widget -> {
             final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
             api.executeOnMain(() -> {
-                if (stack == null || guildPlayer.getCoins() < 3000) {
+                if (InventoryUtils.count(clientPlayerInventory, ItemTags.LOGS) < 64 || guildPlayer.getCoins() < 3000) {
                     Translations.GUILDMASTER_NOT_ENOUGH_RESOURCES.send(player);
                     return;
                 }
@@ -128,13 +129,35 @@ public class GuildMasterScreen extends ScreenTOK {
                     return;
                 }
 
-                ServerPlayerEntity serverPlayerEntity = MinecraftClient.getInstance().getServer().getPlayerManager().getPlayer(player.getUuid());
-                if (serverPlayerEntity != null) {
+                api.executeOnServerEnvironment(server -> {
+                    ServerPlayerEntity serverPlayerEntity = server.getPlayerManager().getPlayer(player.getUuid());
+                    if (serverPlayerEntity == null) return;
                     PlayerInventory serverPlayerInventory = serverPlayerEntity.getInventory();
-                    serverPlayerInventory.setStack(serverPlayerInventory.getSlotWithStack(stack), new ItemStack(Items.AIR));
-                    guildPlayer.setCoins(guildPlayer.getCoins() - 3000);
-                    instance.rebuild(serverPlayerEntity, api, SchematicOptions.IGNORE_DEFENDERS);
-                }
+                    GuildPlayer serverGuildPlayer = instance.getPlayer(serverPlayerEntity);
+                    if (serverGuildPlayer == null) return;
+                    if (!instance.beginGuildRebuild()) return;
+                    if (!serverGuildPlayer.trySpendCoins(3000)) {
+                        instance.finishGuildRebuild();
+                        return;
+                    }
+                    if (!InventoryUtils.remove(serverPlayerInventory, ItemTags.LOGS, 64)) {
+                        serverGuildPlayer.tryCreditCoins(3000);
+                        instance.finishGuildRebuild();
+                        return;
+                    }
+                    instance.rebuild(serverPlayerEntity, api, SchematicOptions.IGNORE_DEFENDERS).whenComplete((box, error) -> {
+                        instance.finishGuildRebuild();
+                        if (error == null) {
+                            serverPlayerEntity.sendMessage(Text.translatable("message.taleofkingdoms.guild.repair_success"), false);
+                            return;
+                        }
+                        serverGuildPlayer.tryCreditCoins(3000);
+                        ItemStack refund = new ItemStack(Items.OAK_LOG, 64);
+                        serverPlayerInventory.insertStack(refund);
+                        if (!refund.isEmpty()) serverPlayerEntity.dropItem(refund, false);
+                        serverPlayerEntity.sendMessage(Text.translatable("message.taleofkingdoms.guild.rebuild_failed"), false);
+                    });
+                });
             });
             this.close();
         }).dimensions(this.width / 2 - 75, this.height / 2 + 23, 150, 20).build());
@@ -152,17 +175,23 @@ public class GuildMasterScreen extends ScreenTOK {
         }).dimensions(this.width / 2 - 75, this.height / 2 + 46, 150, 20).build());
 
         this.worthness = new ScreenBar(this.width / 2 - 65 , this.height / 2 + 83, 125, 12, 1.0F, BarColour.RED);
-        this.worthness.setBar(guildPlayer.getWorthiness() / 1500.0F);
+        int target = Math.max(1, GuildQuestProgression.getCurrentTarget(instance, guildPlayer));
+        this.worthness.setBar(Math.min(1.0F, guildPlayer.getWorthiness() / (float) target));
     }
 
     @Override
     public void render(DrawContext context, int par1, int par2, float par3) {
         super.render(context, par1, par2, par3);
+        int target = Math.max(1, GuildQuestProgression.getCurrentTarget(instance, guildPlayer));
+        this.worthness.setBar(Math.min(1.0F, guildPlayer.getWorthiness() / (float) target));
         String order = Translations.GUILDMASTER_GUILD_ORDER.getFormatted() + guildPlayer.getCoins() + " " + Translations.GOLD_COINS.getFormatted();
-        String path = Translations.GUILDMASTER_PATH.getFormatted();
+        Text path = Text.empty()
+                .append(Translations.GUILDMASTER_PATH.getTranslation())
+                .append(" ")
+                .append(GuildQuestProgression.getCurrentObjective(instance, guildPlayer));
         context.drawCenteredTextWithShadow(this.textRenderer, order, this.width / 2, this.height / 4 - 25, 0xFFFFFF);
         context.drawCenteredTextWithShadow(this.textRenderer, path, this.width / 2 , this.height / 2 + 70, 0XFFFFFF);
-        context.drawCenteredTextWithShadow(this.textRenderer, "Repairing the guild costs 64 logs and 3000 coins.", this.width / 2, this.height / 2 + 100, 0XFFFFFF);
+        context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("menu.taleofkingdoms.guild_master.repair_cost"), this.width / 2, this.height / 2 + 100, 0XFFFFFF);
         this.worthness.drawBar(context);
     }
 
@@ -185,8 +214,14 @@ public class GuildMasterScreen extends ScreenTOK {
 
         this.signContractButton = this.addDrawableChild(ButtonWidget.builder(Translations.GUILDMASTER_CONTRACT_SIGN_UP.getTranslation(), widget -> {
             if (MinecraftClient.getInstance().getServer() != null) {
-                guildPlayer.setSignedContract(true);
-                Translations.GUILDMASTER_CONTRACT_SIGN.send(player);
+                TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
+                    ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                    if (serverPlayer == null) return;
+                    GuildPlayer serverGuildPlayer = instance.getPlayer(serverPlayer);
+                    if (serverGuildPlayer == null) return;
+                    serverGuildPlayer.setSignedContract(true);
+                    Translations.GUILDMASTER_CONTRACT_SIGN.send(serverPlayer);
+                });
             } else {
                 TaleOfKingdomsClient.getAPI().getClientPacket(Packets.SIGN_CONTRACT)
                         .sendPacket(player, new SignContractPacket(true));
@@ -204,10 +239,16 @@ public class GuildMasterScreen extends ScreenTOK {
             return;
         }
 
-        this.addDrawableChild(ButtonWidget.builder(Translations.GUILDMASTER_CONTRACT_CANCEL.getTranslation(), widget -> {
+        this.cancelContractButton = this.addDrawableChild(ButtonWidget.builder(Translations.GUILDMASTER_CONTRACT_CANCEL.getTranslation(), widget -> {
             if (MinecraftClient.getInstance().getServer() != null) {
-                guildPlayer.setSignedContract(false);
-                Translations.GUILDMASTER_CONTRACT_CANCEL_AWAIT.send(player);
+                TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
+                    ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                    if (serverPlayer == null) return;
+                    GuildPlayer serverGuildPlayer = instance.getPlayer(serverPlayer);
+                    if (serverGuildPlayer == null) return;
+                    serverGuildPlayer.setSignedContract(false);
+                    Translations.GUILDMASTER_CONTRACT_CANCEL_AWAIT.send(serverPlayer);
+                });
             } else {
                 TaleOfKingdomsClient.getAPI().getClientPacket(Packets.SIGN_CONTRACT)
                         .sendPacket(player, new SignContractPacket(false));
@@ -228,19 +269,28 @@ public class GuildMasterScreen extends ScreenTOK {
         this.hireHuntersButton = this.addDrawableChild(ButtonWidget.builder(hunterText, widget -> {
             if (guildPlayer.getCoins() >= 1500) {
                 final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
-                Translations.HUNTER_SERVE.send(player);
                 if (MinecraftClient.getInstance().getServer() == null) {
+                    Translations.HUNTER_SERVE.send(player);
                     api.getClientPacket(Packets.HIRE_HUNTER)
                             .sendPacket(player, new HireHunterPacket(false));
                     return;
                 }
 
                 api.executeOnServerEnvironment((server) -> {
-                    ServerWorld serverWorld = server.getOverworld();
-                    BlockPos blockPos = entity.getBlockPos();
-                    HunterEntity hunterEntity = EntityUtils.spawnEntity(EntityTypes.HUNTER, serverWorld, blockPos);
-                    guildPlayer.getHunters().add(hunterEntity.getUuid());
-                    guildPlayer.setCoins(guildPlayer.getCoins() - 1500);
+                    ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                    if (serverPlayer == null || !(serverPlayer.getWorld().getEntityById(entity.getId()) instanceof GuildMasterEntity serverGuildMaster)) return;
+                    GuildPlayer serverGuildPlayer = instance.getPlayer(serverPlayer);
+                    if (serverGuildPlayer == null) return;
+                    BlockPos blockPos = serverGuildMaster.getBlockPos();
+                    HunterEntity hunterEntity = EntityUtils.spawnEntity(EntityTypes.HUNTER, serverPlayer, blockPos);
+                    if (hunterEntity == null) return;
+                    if (!serverGuildPlayer.trySpendCoins(1500)) {
+                        hunterEntity.remove(Entity.RemovalReason.DISCARDED);
+                        return;
+                    }
+                    hunterEntity.setOwner(serverPlayer);
+                    serverGuildPlayer.getHunters().add(hunterEntity.getUuid());
+                    Translations.HUNTER_SERVE.send(serverPlayer);
                 });
 
                 this.makeHireHuntersButton();

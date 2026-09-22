@@ -1,6 +1,5 @@
 package com.convallyria.taleofkingdoms.client.gui.entity;
 
-import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.TaleOfKingdomsAPI;
 import com.convallyria.taleofkingdoms.client.gui.ScreenTOK;
 import com.convallyria.taleofkingdoms.common.entity.guild.InnkeeperEntity;
@@ -16,8 +15,8 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
@@ -40,65 +39,75 @@ public class InnkeeperScreen extends ScreenTOK {
         super.init();
         this.addDrawableChild(ButtonWidget.builder(Text.translatable("menu.taleofkingdoms.innkeeper.rest"), widget -> {
             this.close();
-            BlockPos rest = BlockUtils.locateRestingPlace(instance, player);
-            if (rest != null) {
-                final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
-                ConquestInstance conquestInstance = api.getConquestInstanceStorage().mostRecentInstance().orElse(null);
-                if (conquestInstance == null) return;
-
-                final GuildPlayer guildPlayer = conquestInstance.getPlayer(player.getUuid());
-                if (guildPlayer.getCoins() < 10) {
-                    Translations.INNKEEPER_NOT_ENOUGH_COINS.send(player);
-                    return;
-                } else {
-                    Translations.INNKEEPER_REST_SUCCESS.send(player);
-                }
-
-                MinecraftServer server = MinecraftClient.getInstance().getServer();
-                if (server == null) {
-                    api.getClientPacket(Packets.INNKEEPER_HIRE_ROOM)
-                            .sendPacket(player, new InnkeeperActionPacket(true));
-                    return;
-                }
-
-                api.executeOnServerEnvironment((s) -> {
-                    adjustTime(server, 1000);
-                    ServerPlayerEntity serverPlayerEntity = MinecraftClient.getInstance().getServer().getPlayerManager().getPlayer(player.getUuid());
-                    if (serverPlayerEntity == null) return;
-                    serverPlayerEntity.requestTeleport(rest.getX() + 0.5, rest.getY(), rest.getZ() + 0.5);
-                    serverPlayerEntity.refreshPositionAfterTeleport(rest.getX() + 0.5, rest.getY(), rest.getZ() + 0.5);
-                    serverPlayerEntity.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 100, 1));
-                    serverPlayerEntity.addStatusEffect(new StatusEffectInstance(StatusEffects.NAUSEA, 200, 0));
-                    guildPlayer.setCoins(guildPlayer.getCoins() - 10);
-                });
-            } else {
-                player.sendMessage(Text.translatable("menu.taleofkingdoms.innkeeper.no_rooms"));
-            }
-        }).dimensions(this.width / 2 - 75, this.height / 4 + 50, 150, 20).build());
-
-        this.addDrawableChild(ButtonWidget.builder(Text.translatable("menu.taleofkingdoms.innkeeper.wait"), widget -> {
-            this.close();
-            MinecraftServer server = MinecraftClient.getInstance().getServer();
             final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
             ConquestInstance conquestInstance = api.getConquestInstanceStorage().mostRecentInstance().orElse(null);
             if (conquestInstance == null) return;
 
             final GuildPlayer guildPlayer = conquestInstance.getPlayer(player.getUuid());
-            if (guildPlayer.getCoins() < 10) {
+            if (guildPlayer == null || guildPlayer.getCoins() < 10) {
                 Translations.INNKEEPER_NOT_ENOUGH_COINS.send(player);
                 return;
-            } else {
-                Translations.INNKEEPER_WAIT_SUCCESS.send(player);
             }
 
-            if (server == null) {
+            if (MinecraftClient.getInstance().getServer() == null) {
+                api.getClientPacket(Packets.INNKEEPER_HIRE_ROOM)
+                        .sendPacket(player, new InnkeeperActionPacket(true));
+                return;
+            }
+
+            api.executeOnServerEnvironment(server -> {
+                ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                if (serverPlayer == null) return;
+                GuildPlayer serverGuildPlayer = conquestInstance.getPlayer(serverPlayer);
+                if (serverGuildPlayer == null) return;
+                BlockPos rest = BlockUtils.locateRestingPlace(conquestInstance, serverPlayer);
+                if (rest == null) {
+                    serverPlayer.sendMessage(Text.translatable("menu.taleofkingdoms.innkeeper.no_rooms"));
+                    return;
+                }
+                if (!serverGuildPlayer.trySpendCoins(10)) {
+                    Translations.INNKEEPER_NOT_ENOUGH_COINS.send(serverPlayer);
+                    return;
+                }
+
+                Translations.INNKEEPER_REST_SUCCESS.send(serverPlayer);
+                advanceTime(serverPlayer.getServerWorld(), 1000);
+                serverPlayer.requestTeleport(rest.getX() + 0.5, rest.getY(), rest.getZ() + 0.5);
+                serverPlayer.refreshPositionAfterTeleport(rest.getX() + 0.5, rest.getY(), rest.getZ() + 0.5);
+                serverPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 100, 1));
+                serverPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.NAUSEA, 200, 0));
+            });
+        }).dimensions(this.width / 2 - 75, this.height / 4 + 50, 150, 20).build());
+
+        this.addDrawableChild(ButtonWidget.builder(Text.translatable("menu.taleofkingdoms.innkeeper.wait"), widget -> {
+            this.close();
+            final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
+            ConquestInstance conquestInstance = api.getConquestInstanceStorage().mostRecentInstance().orElse(null);
+            if (conquestInstance == null) return;
+
+            final GuildPlayer guildPlayer = conquestInstance.getPlayer(player.getUuid());
+            if (guildPlayer == null || guildPlayer.getCoins() < 10) {
+                Translations.INNKEEPER_NOT_ENOUGH_COINS.send(player);
+                return;
+            }
+
+            if (MinecraftClient.getInstance().getServer() == null) {
                 api.getClientPacket(Packets.INNKEEPER_HIRE_ROOM)
                         .sendPacket(player, new InnkeeperActionPacket(false));
                 return;
             }
 
-            adjustTime(server, 13000);
-            guildPlayer.setCoins(guildPlayer.getCoins() - 10);
+            api.executeOnServerEnvironment(server -> {
+                ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                if (serverPlayer == null) return;
+                GuildPlayer serverGuildPlayer = conquestInstance.getPlayer(serverPlayer);
+                if (serverGuildPlayer == null || !serverGuildPlayer.trySpendCoins(10)) {
+                    Translations.INNKEEPER_NOT_ENOUGH_COINS.send(serverPlayer);
+                    return;
+                }
+                Translations.INNKEEPER_WAIT_SUCCESS.send(serverPlayer);
+                advanceTime(serverPlayer.getServerWorld(), 13000);
+            });
         }).dimensions(this.width / 2 - 75, this.height / 4 + 75, 150, 20).build());
 
         this.addDrawableChild(ButtonWidget.builder(Text.translatable("menu.taleofkingdoms.generic.exit"), widget -> {
@@ -107,10 +116,12 @@ public class InnkeeperScreen extends ScreenTOK {
         }).dimensions(this.width / 2 - 75, this.height / 4 + 100, 150, 20).build());
     }
 
-    private void adjustTime(MinecraftServer server, long targetTime) {
-        long currentTime = server.getOverworld().getTimeOfDay() % 24000;
-        long newTime = (currentTime < targetTime) ? targetTime : 24000 + targetTime;
-        server.getOverworld().setTimeOfDay(server.getOverworld().getTimeOfDay() + (newTime - currentTime));
+    private void advanceTime(ServerWorld world, long targetTime) {
+        long currentTime = world.getTimeOfDay();
+        long currentDayTime = Math.floorMod(currentTime, 24000L);
+        long advance = targetTime - currentDayTime;
+        if (advance <= 0) advance += 24000L;
+        world.setTimeOfDay(currentTime + advance);
     }
 
     @Override

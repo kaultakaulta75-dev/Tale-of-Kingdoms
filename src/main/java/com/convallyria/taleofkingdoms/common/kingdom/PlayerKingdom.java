@@ -11,6 +11,7 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
+import net.minecraft.world.Heightmap;
 import net.minecraft.world.World;
 
 import java.util.ArrayList;
@@ -50,7 +51,7 @@ public class PlayerKingdom {
     private final List<BuildCosts> builtBuildings;
     private KingdomTier tier;
     private long lastStockMarketUpdate, lastTaxCollection;
-    private transient boolean constructionInProgress;
+    private transient volatile boolean constructionInProgress;
 
     public PlayerKingdom(BlockPos origin) {
         this.origin = origin;
@@ -121,13 +122,20 @@ public class PlayerKingdom {
         if (!this.builtBuildings.contains(poi)) this.builtBuildings.add(poi);
     }
 
-    public boolean beginConstruction() {
+    public boolean hasCompletedTier(KingdomTier checkedTier) {
+        for (BuildCosts build : BuildCosts.values()) {
+            if (build.getTier() == checkedTier && !hasBuilt(build)) return false;
+        }
+        return true;
+    }
+
+    public synchronized boolean beginConstruction() {
         if (constructionInProgress) return false;
         constructionInProgress = true;
         return true;
     }
 
-    public void finishConstruction() {
+    public synchronized void finishConstruction() {
         constructionInProgress = false;
     }
 
@@ -175,7 +183,7 @@ public class PlayerKingdom {
             }
         }
 
-        benefitter.setCoins(benefitter.getCoins() + totalGold);
+        if (totalGold > 0 && !benefitter.tryCreditCoins(totalGold)) return 0;
         this.lastTaxCollection = currentTime;
         return totalGold;
     }
@@ -184,5 +192,43 @@ public class PlayerKingdom {
         if (start == null || end == null) return false; // Probably still pasting.
         BlockBox blockBox = new BlockBox(end.getX(), end.getY(), end.getZ(), start.getX(), start.getY(), start.getZ());
         return blockBox.contains(pos);
+    }
+
+    /**
+     * Finds a two-block-high, dry space close to the castle well. This is used
+     * after large schematic replacements so the player cannot be trapped in a
+     * newly placed wall, floor or roof.
+     */
+    public Optional<BlockPos> findSafeArrival(World world) {
+        BlockPos anchor = getPOIPos(KingdomPOI.CITY_BUILDER_WELL_POI);
+        if (anchor == null) anchor = origin;
+        if (anchor == null) return Optional.empty();
+
+        int[][] offsets = {
+                {2, 0}, {-2, 0}, {0, 2}, {0, -2},
+                {3, 2}, {-3, 2}, {3, -2}, {-3, -2},
+                {0, 0}
+        };
+        for (int[] offset : offsets) {
+            BlockPos column = anchor.add(offset[0], 0, offset[1]);
+            for (int yOffset = -2; yOffset <= 6; yOffset++) {
+                BlockPos candidate = column.up(yOffset);
+                if (isSafeArrival(world, candidate)) return Optional.of(candidate);
+            }
+        }
+
+        int surfaceY = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, anchor.getX(), anchor.getZ());
+        BlockPos surface = new BlockPos(anchor.getX(), surfaceY, anchor.getZ());
+        return isSafeArrival(world, surface) ? Optional.of(surface) : Optional.empty();
+    }
+
+    private boolean isSafeArrival(World world, BlockPos pos) {
+        BlockPos head = pos.up();
+        BlockPos floor = pos.down();
+        return world.getBlockState(pos).getCollisionShape(world, pos).isEmpty()
+                && world.getBlockState(head).getCollisionShape(world, head).isEmpty()
+                && !world.getBlockState(floor).getCollisionShape(world, floor).isEmpty()
+                && world.getFluidState(pos).isEmpty()
+                && world.getFluidState(head).isEmpty();
     }
 }

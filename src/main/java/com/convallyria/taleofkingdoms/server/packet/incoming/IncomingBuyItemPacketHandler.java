@@ -29,8 +29,12 @@ public final class IncomingBuyItemPacketHandler extends InServerPacketHandler<Bu
         int count = packet.count();
         ShopParser.GUI type = packet.type();
         context.taskQueue().execute(() -> TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
-            if (!instance.isInGuild(player)) {
-                reject(player, "Not in guild.");
+            if (itemName == null || itemName.isBlank() || count < 1 || count > 64 || type == null) {
+                reject(player, "Invalid purchase request.");
+                return;
+            }
+            if (!instance.isInGuild(player) && !instance.isInKingdom(player)) {
+                reject(player, "Not in guild or kingdom.");
                 return;
             }
 
@@ -54,15 +58,24 @@ public final class IncomingBuyItemPacketHandler extends InServerPacketHandler<Bu
             }
 
             final GuildPlayer guildPlayer = instance.getPlayer(player);
-            int cost = shopItem.getCost() * count;
-            if (guildPlayer.getCoins() < cost) {
+            if (guildPlayer == null) {
+                reject(player, "Player has no conquest data.");
+                return;
+            }
+            long calculatedCost = (long) shopItem.getCost() * count;
+            if (calculatedCost <= 0 || calculatedCost > Integer.MAX_VALUE) {
+                reject(player, "Invalid purchase cost.");
+                return;
+            }
+            int cost = (int) calculatedCost;
+            if (!guildPlayer.trySpendCoins(cost)) {
                 reject(player, "Coins requirement not met.");
                 return;
             }
 
-            guildPlayer.setCoins(guildPlayer.getCoins() - cost);
-            // Only give item after coins have been deducted. This means they cannot infinitely get items if our setCoins method is broken.
-            player.getInventory().insertStack(new ItemStack(shopItem.getItem(), count));
+            ItemStack purchased = new ItemStack(shopItem.getItem(), count);
+            player.getInventory().insertStack(purchased);
+            if (!purchased.isEmpty()) player.dropItem(purchased, false);
             ServerConquestInstance.sync(player, instance);
         }));
     }

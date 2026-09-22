@@ -3,6 +3,7 @@ package com.convallyria.taleofkingdoms.common.schematic;
 import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.common.generator.processor.GuildStructureProcessor;
 import com.convallyria.taleofkingdoms.common.generator.processor.PlayerKingdomStructureProcessor;
+import com.convallyria.taleofkingdoms.common.generator.util.StructurePlacementUtils;
 import com.convallyria.taleofkingdoms.common.kingdom.PlayerKingdom;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
 import net.minecraft.block.Block;
@@ -41,6 +42,31 @@ public abstract class SchematicHandler {
     }
 
     /**
+     * Checks a castle footprint without changing the world. This is kept in
+     * the schematic handler so the exact template dimensions are always used.
+     */
+    public StructurePlacementUtils.FoundationProblem inspectFoundation(Schematic schematic,
+                                                                        ServerPlayerEntity player,
+                                                                        BlockPos position,
+                                                                        BlockRotation rotation) {
+        try {
+            StructureTemplate structure = player.getServerWorld().getStructureTemplateManager()
+                    .getTemplate(schematic.getPath())
+                    .orElseThrow(() -> new IllegalStateException("Missing structure template: " + schematic.getPath()));
+            Vec3i size = structure.getSize();
+            int width = rotation == BlockRotation.CLOCKWISE_90 || rotation == BlockRotation.COUNTERCLOCKWISE_90
+                    ? size.getZ() : size.getX();
+            int depth = rotation == BlockRotation.CLOCKWISE_90 || rotation == BlockRotation.COUNTERCLOCKWISE_90
+                    ? size.getX() : size.getZ();
+            int maximumVariation = schematic == Schematic.TIER_2_KINGDOM ? 22 : 14;
+            return StructurePlacementUtils.inspectFoundation(player.getServerWorld(), position, width, depth, maximumVariation);
+        } catch (Exception error) {
+            TaleOfKingdoms.LOGGER.error("Unable to inspect foundation for {}", schematic, error);
+            return StructurePlacementUtils.FoundationProblem.TEMPLATE_UNAVAILABLE;
+        }
+    }
+
+    /**
      * Pastes the selected schematic. Returns a {@link CompletableFuture} containing the {@link BlockBox}.
      * This defaults the position parameter to: <br>
      *     <b>x, y + 1, z</b>
@@ -67,7 +93,7 @@ public abstract class SchematicHandler {
                 if (guildPlayer == null) return;
                 final PlayerKingdom kingdom = guildPlayer.getKingdom();
                 if (kingdom == null) return;
-                structurePlacementData.addProcessor(new PlayerKingdomStructureProcessor(kingdom, player));
+                structurePlacementData.addProcessor(new PlayerKingdomStructureProcessor(kingdom, player, options));
             });
             structurePlacementData.addProcessor(new GuildStructureProcessor(options));
             structurePlacementData.addProcessor(JigsawReplacementStructureProcessor.INSTANCE);

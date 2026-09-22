@@ -28,9 +28,11 @@ public class BlockShopEntity extends ShopEntity {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND || player.getWorld().isClient()) return ActionResult.FAIL;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient()) return ActionResult.SUCCESS;
+        if (TaleOfKingdoms.getAPI() == null) return ActionResult.FAIL;
         TaleOfKingdoms.getAPI().getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.BLOCK_SHOP, this.getId()));
-        return ActionResult.PASS;
+        return ActionResult.SUCCESS;
     }
 
     @Override

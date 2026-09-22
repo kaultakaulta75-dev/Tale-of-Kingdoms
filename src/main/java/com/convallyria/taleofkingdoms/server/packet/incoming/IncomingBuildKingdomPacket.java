@@ -3,18 +3,21 @@ package com.convallyria.taleofkingdoms.server.packet.incoming;
 import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.TaleOfKingdomsAPI;
 import com.convallyria.taleofkingdoms.common.entity.guild.CityBuilderEntity;
+import com.convallyria.taleofkingdoms.common.generator.util.StructurePlacementUtils;
+import com.convallyria.taleofkingdoms.common.kingdom.KingdomTier;
 import com.convallyria.taleofkingdoms.common.kingdom.PlayerKingdom;
-import com.convallyria.taleofkingdoms.common.kingdom.poi.KingdomPOI;
 import com.convallyria.taleofkingdoms.common.packet.Packets;
 import com.convallyria.taleofkingdoms.common.packet.c2s.BuildKingdomPacket;
 import com.convallyria.taleofkingdoms.common.packet.context.PacketContext;
 import com.convallyria.taleofkingdoms.common.schematic.Schematic;
 import com.convallyria.taleofkingdoms.common.schematic.SchematicOptions;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.util.BlockRotation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.Vec3i;
@@ -39,13 +42,18 @@ public final class IncomingBuildKingdomPacket extends InServerPacketHandler<Buil
                 }
 
                 final GuildPlayer guildPlayer = instance.getPlayer(player);
+                if (guildPlayer == null) {
+                    reject(player, "No guild player data");
+                    return;
+                }
                 if (guildPlayer.getKingdom() != null) {
                     reject(player, "Kingdom already built");
                     return;
                 }
 
-                if (guildPlayer.getWorthiness() < 1500) {
-                    reject(player, "Not enough worthiness");
+                if (!GuildQuestProgression.canFoundKingdom(instance, guildPlayer)) {
+                    player.sendMessage(GuildQuestProgression.getCurrentObjective(instance, guildPlayer), false);
+                    reject(player, "Kingdom quest requirements are incomplete");
                     return;
                 }
 
@@ -57,6 +65,22 @@ public final class IncomingBuildKingdomPacket extends InServerPacketHandler<Buil
                 }
 
                 BlockPos pos = player.getBlockPos().subtract(new Vec3i(0, 25, 85));
+                StructurePlacementUtils.FoundationProblem foundation = TaleOfKingdoms.getAPI()
+                        .getSchematicHandler().inspectFoundation(Schematic.TIER_1_KINGDOM, player, pos, BlockRotation.NONE);
+                if (!foundation.isSuitable()) {
+                    player.sendMessage(Text.translatable(foundation.getTranslationKey()), false);
+                    reject(player, "Unsuitable castle foundation: " + foundation);
+                    return;
+                }
+                BlockPos expandedPos = pos.subtract(KingdomTier.TIER_TWO.getOffset());
+                foundation = TaleOfKingdoms.getAPI().getSchematicHandler()
+                        .inspectFoundation(Schematic.TIER_2_KINGDOM, player, expandedPos, BlockRotation.NONE);
+                if (!foundation.isSuitable()) {
+                    player.sendMessage(Text.translatable(foundation.getTranslationKey()), false);
+                    reject(player, "Unsuitable expanded castle foundation: " + foundation);
+                    return;
+                }
+
                 final PlayerKingdom playerKingdom = new PlayerKingdom(pos);
                 playerKingdom.beginConstruction();
                 guildPlayer.setKingdom(playerKingdom);
@@ -77,14 +101,9 @@ public final class IncomingBuildKingdomPacket extends InServerPacketHandler<Buil
                     playerKingdom.setEnd(end);
                     playerKingdom.setOrigin(new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ()));
 
-                    // Make city builder stop following player and move to well POI
-                    cityBuilderEntity.stopFollowingPlayer();
-                    // Teleport to the player first, should avoid getting stuck in ground
-                    cityBuilderEntity.requestTeleport(player.getX(), player.getY(), player.getZ());
-                    // Now move to the well location
-                    BlockPos well = playerKingdom.getPOIPos(KingdomPOI.CITY_BUILDER_WELL_POI);
-                    if (well != null) cityBuilderEntity.setTarget(well);
+                    cityBuilderEntity.settleInKingdom(player, playerKingdom);
 
+                    player.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.founded"), false);
                     ServerConquestInstance.sync(player, instance);
                 });
             });

@@ -30,8 +30,10 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
+import java.util.UUID;
 
 public abstract class WardenHireable extends TOKEntity {
 
@@ -55,23 +57,55 @@ public abstract class WardenHireable extends TOKEntity {
     public abstract Optional<Identifier> getSkin();
 
     private Goal followGoal;
+    private @Nullable UUID ownerUuid;
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND) return ActionResult.FAIL;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (this.getWorld().isClient()) return ActionResult.SUCCESS;
+        if (!isOwnedBy(player) && ownerUuid != null) {
+            player.sendMessage(Text.translatable("message.taleofkingdoms.soldier.not_owner"), true);
+            return ActionResult.SUCCESS;
+        }
         this.toggleFollowGoal(player);
-        return super.interactMob(player, hand);
+        return ActionResult.SUCCESS;
     }
 
     public void toggleFollowGoal(PlayerEntity cause) {
+        if (ownerUuid == null) ownerUuid = cause.getUuid();
+        if (!isOwnedBy(cause)) return;
         if (followGoal != null) {
             if (!this.getWorld().isClient()) cause.sendMessage(getGuardText());
-            this.targetSelector.remove(followGoal);
-            this.followGoal = null;
+            setFollowing(false);
         } else {
             if (!this.getWorld().isClient()) cause.sendMessage(getFollowText());
-            this.targetSelector.add(5, followGoal = new FollowPlayerGoal(this, 0.6D, 2.5f, 30));
+            setFollowing(true);
         }
+    }
+
+    private void setFollowing(boolean following) {
+        if (!following) {
+            if (followGoal != null) this.goalSelector.remove(followGoal);
+            this.followGoal = null;
+            return;
+        }
+        if (followGoal != null || ownerUuid == null) return;
+        this.goalSelector.add(5, followGoal = new FollowPlayerGoal(
+                this, 0.6D, 2.5f, 30,
+                player -> ownerUuid != null && ownerUuid.equals(player.getUuid())
+        ));
+    }
+
+    public void setOwner(PlayerEntity owner) {
+        this.ownerUuid = owner.getUuid();
+    }
+
+    public boolean isOwnedBy(PlayerEntity player) {
+        return ownerUuid != null && ownerUuid.equals(player.getUuid());
+    }
+
+    public @Nullable UUID getOwnerUuid() {
+        return ownerUuid;
     }
 
     public boolean isFollowingPlayer() {
@@ -148,6 +182,8 @@ public abstract class WardenHireable extends TOKEntity {
     public void readCustomDataFromNbt(NbtCompound nbt) {
         super.readCustomDataFromNbt(nbt);
         this.internalTotalExperience = nbt.getInt("XpTotal");
+        this.ownerUuid = nbt.containsUuid("Owner") ? nbt.getUuid("Owner") : null;
+        setFollowing(nbt.getBoolean("Following"));
         this.dataTracker.set(TOTAL_EXPERIENCE, internalTotalExperience);
         this.updateLevelledAttributes();
     }
@@ -156,5 +192,7 @@ public abstract class WardenHireable extends TOKEntity {
     public void writeCustomDataToNbt(NbtCompound nbt) {
         super.writeCustomDataToNbt(nbt);
         nbt.putInt("XpTotal", internalTotalExperience);
+        if (ownerUuid != null) nbt.putUuid("Owner", ownerUuid);
+        nbt.putBoolean("Following", followGoal != null);
     }
 }

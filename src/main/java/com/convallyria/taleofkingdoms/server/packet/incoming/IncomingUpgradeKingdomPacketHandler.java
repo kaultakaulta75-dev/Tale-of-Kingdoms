@@ -4,11 +4,11 @@ import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.common.entity.guild.CityBuilderEntity;
 import com.convallyria.taleofkingdoms.common.kingdom.KingdomTier;
 import com.convallyria.taleofkingdoms.common.kingdom.PlayerKingdom;
-import com.convallyria.taleofkingdoms.common.kingdom.builds.BuildCosts;
 import com.convallyria.taleofkingdoms.common.packet.Packets;
 import com.convallyria.taleofkingdoms.common.packet.c2s.UpgradeKingdomPacket;
 import com.convallyria.taleofkingdoms.common.packet.context.PacketContext;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import com.convallyria.taleofkingdoms.server.world.ServerConquestInstance;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.Items;
@@ -16,7 +16,6 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
-import java.util.Arrays;
 import java.util.Optional;
 
 public final class IncomingUpgradeKingdomPacketHandler extends InServerPacketHandler<UpgradeKingdomPacket> {
@@ -47,11 +46,18 @@ public final class IncomingUpgradeKingdomPacketHandler extends InServerPacketHan
                 reject(player, "Kingdom is already at maximum tier");
                 return;
             }
+            final KingdomTier next = nextTier.get();
+            if (!GuildQuestProgression.canUpgradeTo(instance, guildPlayer, next)) {
+                player.sendMessage(Text.translatable("message.taleofkingdoms.quest.upgrade_locked",
+                        guildPlayer.getWorthiness(), next.getRequiredWorthiness()), false);
+                reject(player, "Kingdom quest requirements are incomplete");
+                return;
+            }
             if (cityBuilder.getWood() < 320 || cityBuilder.getStone() < 320) {
                 reject(player, "Not enough resources");
                 return;
             }
-            if (Arrays.stream(BuildCosts.values()).anyMatch(cost -> cost.getTier() == kingdom.getTier() && !kingdom.hasBuilt(cost))) {
+            if (!kingdom.hasCompletedTier(kingdom.getTier())) {
                 reject(player, "Required tier buildings are missing");
                 return;
             }
@@ -60,7 +66,6 @@ public final class IncomingUpgradeKingdomPacketHandler extends InServerPacketHan
                 return;
             }
 
-            final KingdomTier next = nextTier.get();
             final BlockPos offsetPos = kingdom.getOrigin().subtract(next.getOffset());
             TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(next.getSchematic(), player, offsetPos).whenComplete((box, error) -> {
                 kingdom.finishConstruction();
@@ -74,8 +79,10 @@ public final class IncomingUpgradeKingdomPacketHandler extends InServerPacketHan
                 kingdom.setStart(new BlockPos(box.getMaxX(), box.getMaxY(), box.getMaxZ()));
                 kingdom.setEnd(new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ()));
                 kingdom.setTier(next);
+                cityBuilder.settleInKingdom(player, kingdom);
                 cityBuilder.getInventory().removeItem(Items.OAK_LOG, 320);
                 cityBuilder.getInventory().removeItem(Items.COBBLESTONE, 320);
+                player.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.upgrade_success", next.getName()), false);
                 ServerConquestInstance.sync(player, instance);
             });
         }));

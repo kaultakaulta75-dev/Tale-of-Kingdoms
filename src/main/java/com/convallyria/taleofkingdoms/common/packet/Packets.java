@@ -13,6 +13,7 @@ import com.convallyria.taleofkingdoms.common.packet.c2s.HireHunterPacket;
 import com.convallyria.taleofkingdoms.common.packet.c2s.InnkeeperActionPacket;
 import com.convallyria.taleofkingdoms.common.packet.c2s.ToggleSellGuiPacket;
 import com.convallyria.taleofkingdoms.common.packet.c2s.UpgradeKingdomPacket;
+import com.convallyria.taleofkingdoms.common.packet.c2s.WardenActionPacket;
 import com.convallyria.taleofkingdoms.common.packet.s2c.InstanceSyncPacket;
 import com.convallyria.taleofkingdoms.common.packet.s2c.OpenScreenPacket;
 import net.minecraft.network.packet.CustomPayload;
@@ -34,6 +35,7 @@ public class Packets {
     public static final CustomPayload.Id<ForemanBuyWorkerPacket> FOREMAN_BUY_WORKER = register("foreman_buy_worker");
     public static final CustomPayload.Id<ForemanCollectPacket> FOREMAN_COLLECT = register("foreman_collect");
     public static final CustomPayload.Id<CityBuilderActionPacket> CITYBUILDER_ACTION = register("citybuilder_action");
+    public static final CustomPayload.Id<WardenActionPacket> WARDEN_ACTION = register("warden_action");
     
     private static <T extends CustomPayload> CustomPayload.Id<T> register(String id) {
         return new CustomPayload.Id<>(Identifier.of(TaleOfKingdoms.MODID, id));

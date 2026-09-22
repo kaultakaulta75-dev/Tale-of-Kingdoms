@@ -13,6 +13,9 @@ import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.ai.RangedAttackMob;
 import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.data.TrackedData;
+import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.projectile.PersistentProjectileEntity;
 import net.minecraft.entity.projectile.ProjectileUtil;
@@ -32,12 +35,18 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class ArcherHireableEntity extends WardenHireable implements CrossbowUser, RangedAttackMob, States {
 
-    private boolean charging;
+    private static final TrackedData<Boolean> CHARGING = DataTracker.registerData(ArcherHireableEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
+
     private boolean ticked;
+
+    @Override
+    protected void initDataTracker(DataTracker.Builder builder) {
+        super.initDataTracker(builder);
+        builder.add(CHARGING, false);
+    }
 
     public ArcherHireableEntity(@NotNull EntityType<? extends PathAwareEntity> entityType, @NotNull World world) {
         super(entityType, world);
@@ -45,12 +54,12 @@ public class ArcherHireableEntity extends WardenHireable implements CrossbowUser
 
     @Environment(EnvType.CLIENT)
     public boolean isCharging() {
-        return charging;
+        return this.dataTracker.get(CHARGING);
     }
 
     @Override
     public void setCharging(boolean charging) {
-        this.charging = charging;
+        this.dataTracker.set(CHARGING, charging);
     }
 
     @Override
@@ -113,7 +122,7 @@ public class ArcherHireableEntity extends WardenHireable implements CrossbowUser
     @Override
     public EntityData initialize(ServerWorldAccess world, LocalDifficulty difficulty, SpawnReason spawnReason, @Nullable EntityData entityData) {
         EntityData entityReturnData = super.initialize(world, difficulty, spawnReason, entityData);
-        int value = ThreadLocalRandom.current().nextInt(2);
+        int value = this.random.nextInt(2);
         this.setStackInHand(Hand.MAIN_HAND, new ItemStack(value == 1 ? Items.BOW : Items.CROSSBOW));
         return entityReturnData;
     }

@@ -15,6 +15,7 @@ import com.convallyria.taleofkingdoms.common.translation.Translations;
 import com.convallyria.taleofkingdoms.common.utils.InventoryUtils;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.InventoryOwner;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
@@ -40,6 +41,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
@@ -62,8 +64,9 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
         builder.add(WOOD, 0);
     }
 
-    private final FollowPlayerGoal followPlayerGoal = new FollowPlayerGoal(this, 0.75F, 5, 50);
+    private @Nullable FollowPlayerGoal followPlayerGoal;
     private WalkToTargetGoal currentBlockTarget;
+    private @Nullable UUID ownerUuid;
 
     private final SimpleInventory inventory = new SimpleInventory(10);
 
@@ -83,39 +86,44 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND) return ActionResult.FAIL;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
         final boolean client = player.getWorld().isClient();
+        if (client) return ActionResult.SUCCESS;
+        if (TaleOfKingdoms.getAPI() == null) return ActionResult.FAIL;
         TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
             final GuildPlayer guildPlayer = instance.getPlayer(player);
+            if (guildPlayer == null) return;
             final PlayerKingdom kingdom = guildPlayer.getKingdom();
             if (kingdom != null) {
-                if (client) return;
                 openScreen(player, kingdom, instance);
                 return;
             }
 
             if (this.getDataTracker().get(MOVING_TO_LOCATION)) {
+                if (ownerUuid != null && !ownerUuid.equals(player.getUuid())) {
+                    player.sendMessage(net.minecraft.text.Text.translatable("message.taleofkingdoms.city_builder.not_owner"), true);
+                    return;
+                }
                 BlockPos current = this.getBlockPos();
                 int distance = (int) instance.getCentre().distanceTo(new Vec3d(current.getX(), current.getY(), current.getZ()));
                 if (distance < 500) {
-                    if (!client) Translations.CITYBUILDER_DISTANCE.send(player, distance, 500);
+                    Translations.CITYBUILDER_DISTANCE.send(player, distance, 500);
                     return;
                 }
 
-                if (!client) {
-                    openScreen(player, null, instance);
-                }
+                openScreen(player, null, instance);
                 return;
             }
 
-            if (guildPlayer.getWorthiness() >= 1500) {
-                if (client) Translations.CITYBUILDER_BUILD.send(player);
-                this.followPlayer();
+            if (GuildQuestProgression.canFoundKingdom(instance, guildPlayer)) {
+                Translations.CITYBUILDER_BUILD.send(player);
+                this.followPlayer(player);
             } else {
-                if (client) Translations.CITYBUILDER_MESSAGE.send(player);
+                Translations.CITYBUILDER_MESSAGE.send(player);
+                player.sendMessage(GuildQuestProgression.getCurrentObjective(instance, guildPlayer), false);
             }
         });
-        return ActionResult.PASS;
+        return ActionResult.SUCCESS;
     }
 
     public void give64wood(PlayerEntity player) {
@@ -152,7 +160,7 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
                 result.completeExceptionally(new IllegalStateException("City builder is no longer available"));
                 return;
             }
-            if (serverCityBuilder.getStone() != 320 || serverCityBuilder.getWood() != 320) {
+            if (serverCityBuilder.getStone() < 320 || serverCityBuilder.getWood() < 320) {
                 result.completeExceptionally(new IllegalStateException("Not enough resources to repair kingdom"));
                 return;
             }
@@ -164,14 +172,17 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
             List<CompletableFuture<?>> placements = new ArrayList<>();
             final Schematic kingdomSchematic = kingdom.getTier().getSchematic();
             BlockPos newOrigin = kingdom.getOrigin().subtract(kingdom.getTier().getOffset());
-            placements.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(kingdomSchematic, serverPlayer, newOrigin));
+            placements.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(
+                    kingdomSchematic, serverPlayer, newOrigin, SchematicOptions.IGNORE_KINGDOM_VILLAGERS));
             for (BuildCosts buildCost : BuildCosts.values()) {
                 if (kingdom.getTier() != buildCost.getTier()) continue;
                 final KingdomPOI kingdomPOI = buildCost.getKingdomPOI();
                 final Schematic schematic = buildCost.getSchematic();
                 final BlockPos buildPos = kingdom.getPOIPos(kingdomPOI);
                 if (kingdom.hasBuilt(buildCost) && schematic != null && buildPos != null) {
-                    placements.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(schematic, serverPlayer, buildPos, buildCost.getSchematicRotation()));
+                    placements.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(
+                            schematic, serverPlayer, buildPos, buildCost.getSchematicRotation(),
+                            SchematicOptions.IGNORE_KINGDOM_VILLAGERS));
                 }
             }
 
@@ -182,7 +193,9 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
                     result.completeExceptionally(error);
                     return;
                 }
-                serverCityBuilder.getInventory().clear();
+                serverCityBuilder.settleInKingdom(serverPlayer, kingdom);
+                serverCityBuilder.getInventory().removeItem(Items.OAK_LOG, 320);
+                serverCityBuilder.getInventory().removeItem(Items.COBBLESTONE, 320);
                 result.complete(null);
             });
         });
@@ -212,7 +225,12 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
             }
 
             TaleOfKingdoms.LOGGER.info("Placing {}...", build);
-            TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(build.getSchematic(), serverPlayer, buildPos, build.getSchematicRotation()).whenComplete((box, error) -> {
+            boolean repairing = kingdom.hasBuilt(build);
+            SchematicOptions[] options = repairing
+                    ? new SchematicOptions[]{SchematicOptions.IGNORE_KINGDOM_VILLAGERS}
+                    : new SchematicOptions[0];
+            TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(
+                    build.getSchematic(), serverPlayer, buildPos, build.getSchematicRotation(), options).whenComplete((box, error) -> {
                 kingdom.finishConstruction();
                 if (error != null) {
                     TaleOfKingdoms.LOGGER.error("Failed to place {} for {}", build, serverPlayer.getName().getString(), error);
@@ -228,14 +246,39 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
         return future;
     }
 
-    public void followPlayer() {
+    public void followPlayer(PlayerEntity owner) {
+        this.ownerUuid = owner.getUuid();
         this.getDataTracker().set(MOVING_TO_LOCATION, true);
-        this.goalSelector.add(2, followPlayerGoal);
+        if (followPlayerGoal == null) {
+            followPlayerGoal = new FollowPlayerGoal(this, 0.75F, 5, 50,
+                    player -> ownerUuid != null && ownerUuid.equals(player.getUuid()));
+            this.goalSelector.add(2, followPlayerGoal);
+        }
     }
 
     public void stopFollowingPlayer() {
         this.getDataTracker().set(MOVING_TO_LOCATION, false);
-        this.goalSelector.remove(followPlayerGoal);
+        if (followPlayerGoal != null) this.goalSelector.remove(followPlayerGoal);
+        this.followPlayerGoal = null;
+    }
+
+    /**
+     * Places both the builder and their owner back in safe, useful positions
+     * after a full castle schematic has replaced the surrounding blocks.
+     */
+    public void settleInKingdom(ServerPlayerEntity player, PlayerKingdom kingdom) {
+        stopFollowingPlayer();
+        BlockPos destination = kingdom.hasBuilt(BuildCosts.BUILDER_HOUSE)
+                ? kingdom.getPOIPos(KingdomPOI.CITY_BUILDER_HOUSE_POI)
+                : kingdom.getPOIPos(KingdomPOI.CITY_BUILDER_WELL_POI);
+        if (destination == null) destination = kingdom.getPOIPos(KingdomPOI.CITY_BUILDER_WELL_POI);
+        if (destination != null) {
+            requestTeleport(destination.getX() + 0.5, destination.getY(), destination.getZ() + 0.5);
+            setTarget(destination);
+        }
+
+        kingdom.findSafeArrival(player.getWorld()).ifPresent(safe ->
+                player.requestTeleport(safe.getX() + 0.5, safe.getY(), safe.getZ() + 0.5));
     }
 
     public void setTarget(BlockPos pos) {
@@ -298,6 +341,8 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
     public void writeCustomDataToNbt(NbtCompound nbt) {
         super.writeCustomDataToNbt(nbt);
         nbt.put("Inventory", this.inventory.toNbtList(this.getRegistryManager()));
+        nbt.putBoolean("MovingToLocation", this.getDataTracker().get(MOVING_TO_LOCATION));
+        if (ownerUuid != null) nbt.putUuid("Owner", ownerUuid);
     }
 
     @Override
@@ -306,5 +351,13 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
         this.inventory.readNbtList(nbt.getList("Inventory", NbtElement.COMPOUND_TYPE), this.getRegistryManager());
         this.getDataTracker().set(STONE, inventory.count(Items.COBBLESTONE));
         this.getDataTracker().set(WOOD, inventory.count(Items.OAK_LOG));
+        this.ownerUuid = nbt.containsUuid("Owner") ? nbt.getUuid("Owner") : null;
+        boolean moving = nbt.getBoolean("MovingToLocation") && ownerUuid != null;
+        this.getDataTracker().set(MOVING_TO_LOCATION, moving);
+        if (moving && followPlayerGoal == null) {
+            followPlayerGoal = new FollowPlayerGoal(this, 0.75F, 5, 50,
+                    player -> ownerUuid != null && ownerUuid.equals(player.getUuid()));
+            this.goalSelector.add(2, followPlayerGoal);
+        }
     }
 }

@@ -39,6 +39,9 @@ public class StockMarketEntity extends ShopEntity {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient()) return ActionResult.SUCCESS;
+
         // Check if there is at least 1 Minecraft day difference
         final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
         if (api == null) return ActionResult.FAIL;
@@ -46,13 +49,14 @@ public class StockMarketEntity extends ShopEntity {
 
         ConquestInstance instance = api.getConquestInstanceStorage().mostRecentInstance().get();
         final GuildPlayer guildPlayer = instance.getPlayer(player);
+        if (guildPlayer == null) return ActionResult.FAIL;
         final PlayerKingdom kingdom = guildPlayer.getKingdom();
 
         final long day = player.getWorld().getTimeOfDay() / 24000L;
         if (kingdom != null && kingdom.getLastStockMarketUpdate() < day) {
             // Update all shop item modifiers if a day has passed
             // Wow this stock market is all over the place
-            for (ShopItem shopItem : ShopParser.SHOP_ITEMS.get(getGUIType())) {
+            for (ShopItem shopItem : getShopItems()) {
                 //todo: figure out a better formula
                 //todo: how to sync to client?
                 shopItem.setModifier(ThreadLocalRandom.current().nextDouble(0.75, 3));
@@ -60,9 +64,8 @@ public class StockMarketEntity extends ShopEntity {
             kingdom.setLastStockMarketUpdate(day);
         }
 
-        if (hand == Hand.OFF_HAND || player.getWorld().isClient()) return ActionResult.FAIL;
-        TaleOfKingdoms.getAPI().getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.STOCK_MARKET, this.getId()));
-        return ActionResult.PASS;
+        api.getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.STOCK_MARKET, this.getId()));
+        return ActionResult.SUCCESS;
     }
 
     @Override

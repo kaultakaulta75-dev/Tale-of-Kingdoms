@@ -38,13 +38,17 @@ public class StartWorldListener extends Listener {
 
     public StartWorldListener() {
         WorldStopCallback.EVENT.register(() -> {
-            if (!joined || worldName == null) return;
-            if (TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().isEmpty()) return;
-
-            ConquestInstance instance = TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().get();
-            instance.save(worldName);
-            TaleOfKingdoms.getAPI().getConquestInstanceStorage().removeConquest(worldName);
+            String stoppedWorld = this.worldName;
+            if (joined && stoppedWorld != null) {
+                TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
+                api.getConquestInstanceStorage().getConquestInstance(stoppedWorld).ifPresent(instance -> {
+                    instance.save(stoppedWorld);
+                    api.getConquestInstanceStorage().removeConquest(stoppedWorld);
+                });
+            }
             this.joined = false;
+            this.worldName = null;
+            this.postJoin.clear();
         });
 
         WorldSessionStartCallback.EVENT.register(worldName -> {

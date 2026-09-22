@@ -16,6 +16,7 @@ import com.convallyria.taleofkingdoms.common.utils.InventoryUtils;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.InventoryOwner;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.data.DataTracker;
@@ -34,6 +35,8 @@ import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+
+import java.util.concurrent.CompletableFuture;
 
 public abstract class ForemanEntity extends TOKEntity implements InventoryOwner {
 
@@ -70,47 +73,67 @@ public abstract class ForemanEntity extends TOKEntity implements InventoryOwner 
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient()) return ActionResult.SUCCESS;
         final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
         if (api == null) return ActionResult.FAIL;
         if (api.getConquestInstanceStorage().mostRecentInstance().isEmpty()) return ActionResult.FAIL;
-        if (hand == Hand.OFF_HAND || player.getWorld().isClient()) return ActionResult.FAIL;
-        TaleOfKingdoms.getAPI().getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.FOREMAN, this.getId()));
-        return ActionResult.PASS;
+        api.getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.FOREMAN, this.getId()));
+        return ActionResult.SUCCESS;
     }
 
-    public void buyWorker(PlayerEntity player, ConquestInstance instance) {
-        final GuildPlayer guildPlayer = instance.getPlayer(player);
-        final int coins = guildPlayer.getCoins();
-        if (coins < 1500) return;
-
-        final PlayerKingdom kingdom = guildPlayer.getKingdom();
-        if (kingdom == null) return;
-
-        guildPlayer.setCoins(coins - 1500);
-        EntityType<? extends WorkerEntity> type = this instanceof QuarryForemanEntity ? EntityTypes.QUARRY_WORKER : EntityTypes.LUMBER_WORKER;
-        BlockPos poi = this instanceof QuarryForemanEntity ? kingdom.getPOIPos(KingdomPOI.QUARRY_WORKER_SPAWN) : kingdom.getPOIPos(KingdomPOI.LUMBER_WORKER_SPAWN);
+    public CompletableFuture<Boolean> buyWorker(PlayerEntity player, ConquestInstance instance) {
+        CompletableFuture<Boolean> result = new CompletableFuture<>();
         TaleOfKingdoms.getAPI().executeOnServerEnvironment((server) -> {
             ServerPlayerEntity serverPlayerEntity = player instanceof ServerPlayerEntity ? (ServerPlayerEntity) player
                     : server.getPlayerManager().getPlayer(player.getUuid());
-            if (serverPlayerEntity == null) return;
-            EntityUtils.spawnEntity(type, serverPlayerEntity, poi);
-            Translations.FOREMAN_BUY_WORKER.send(player);
+            if (serverPlayerEntity == null || !(serverPlayerEntity.getWorld().getEntityById(this.getId()) instanceof ForemanEntity serverForeman)) {
+                result.complete(false);
+                return;
+            }
+            final GuildPlayer guildPlayer = instance.getPlayer(serverPlayerEntity);
+            final PlayerKingdom kingdom = guildPlayer == null ? null : guildPlayer.getKingdom();
+            if (kingdom == null || guildPlayer.getCoins() < 1500) {
+                result.complete(false);
+                return;
+            }
+            EntityType<? extends WorkerEntity> type = serverForeman instanceof QuarryForemanEntity ? EntityTypes.QUARRY_WORKER : EntityTypes.LUMBER_WORKER;
+            BlockPos poi = serverForeman instanceof QuarryForemanEntity
+                    ? kingdom.getPOIPos(KingdomPOI.QUARRY_WORKER_SPAWN)
+                    : kingdom.getPOIPos(KingdomPOI.LUMBER_WORKER_SPAWN);
+            if (poi == null) {
+                result.complete(false);
+                return;
+            }
+            WorkerEntity worker = EntityUtils.spawnEntity(type, serverPlayerEntity, poi);
+            if (worker == null) {
+                result.complete(false);
+                return;
+            }
+            if (!guildPlayer.trySpendCoins(1500)) {
+                worker.remove(Entity.RemovalReason.DISCARDED);
+                result.complete(false);
+                return;
+            }
+            Translations.FOREMAN_BUY_WORKER.send(serverPlayerEntity);
+            result.complete(true);
         });
+        return result;
     }
 
     public void collect64(PlayerEntity player, Item item) {
         TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
             final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
-            final ForemanEntity serverForeman = (ForemanEntity) serverPlayer.getWorld().getEntityById(this.getId());
+            if (serverPlayer == null || !(serverPlayer.getWorld().getEntityById(this.getId()) instanceof ForemanEntity serverForeman)) return;
             final int slotWithStack = InventoryUtils.getSlotWithStack(serverForeman.getInventory(), new ItemStack(item, 64));
             if (slotWithStack == -1) {
-                Translations.FOREMAN_COLLECT_RESOURCES_EMPTY.send(player);
+                Translations.FOREMAN_COLLECT_RESOURCES_EMPTY.send(serverPlayer);
                 return;
             }
 
             final ItemStack itemStack = serverForeman.getInventory().removeStack(slotWithStack);
             serverPlayer.getInventory().insertStack(itemStack);
-            player.getInventory().insertStack(itemStack);
+            if (!itemStack.isEmpty()) serverForeman.getInventory().addStack(itemStack);
         });
     }
 

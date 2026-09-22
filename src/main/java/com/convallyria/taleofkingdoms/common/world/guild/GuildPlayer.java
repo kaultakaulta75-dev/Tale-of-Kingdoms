@@ -6,10 +6,10 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.util.Uuids;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class GuildPlayer {
 
@@ -26,28 +26,28 @@ public class GuildPlayer {
             ).apply(instance, GuildPlayer::new)
     );
 
-    private boolean signedContract;
-    private int coins;
-    private int bankerCoins;
-    private int worthiness;
-    private long farmerLastBread;
-    private @Nullable PlayerKingdom kingdom;
+    private volatile boolean signedContract;
+    private volatile int coins;
+    private volatile int bankerCoins;
+    private volatile int worthiness;
+    private volatile long farmerLastBread;
+    private volatile @Nullable PlayerKingdom kingdom;
     private final List<UUID> hunters;
-    private boolean hasRebuiltGuild;
+    private volatile boolean hasRebuiltGuild;
 
     public GuildPlayer() {
-        this.hunters = new ArrayList<>();
+        this.hunters = new CopyOnWriteArrayList<>();
         this.farmerLastBread = -1;
     }
 
     private GuildPlayer(boolean signedContract, int coins, int bankerCoins, int worthiness, long farmerLastBread, Optional<PlayerKingdom> kingdom, List<UUID> hunters, boolean hasRebuiltGuild) {
         this.signedContract = signedContract;
-        this.coins = coins;
-        this.bankerCoins = bankerCoins;
+        this.coins = Math.max(0, coins);
+        this.bankerCoins = Math.max(0, bankerCoins);
         this.worthiness = worthiness;
         this.farmerLastBread = farmerLastBread;
         this.kingdom = kingdom.orElse(null);
-        this.hunters = new ArrayList<>(hunters);
+        this.hunters = new CopyOnWriteArrayList<>(hunters);
         this.hasRebuiltGuild = hasRebuiltGuild;
     }
 
@@ -63,16 +63,42 @@ public class GuildPlayer {
         return coins;
     }
 
-    public void setCoins(int coins) {
-        this.coins = coins;
+    public synchronized void setCoins(int coins) {
+        this.coins = Math.max(0, coins);
     }
 
     public int getBankerCoins() {
         return bankerCoins;
     }
 
-    public void setBankerCoins(int bankerCoins) {
-        this.bankerCoins = bankerCoins;
+    public synchronized void setBankerCoins(int bankerCoins) {
+        this.bankerCoins = Math.max(0, bankerCoins);
+    }
+
+    public synchronized boolean trySpendCoins(int amount) {
+        if (amount <= 0 || coins < amount) return false;
+        coins -= amount;
+        return true;
+    }
+
+    public synchronized boolean tryCreditCoins(int amount) {
+        if (amount <= 0 || (long) coins + amount > Integer.MAX_VALUE) return false;
+        coins += amount;
+        return true;
+    }
+
+    public synchronized boolean tryDepositCoins(int amount) {
+        if (amount <= 0 || coins < amount || (long) bankerCoins + amount > Integer.MAX_VALUE) return false;
+        coins -= amount;
+        bankerCoins += amount;
+        return true;
+    }
+
+    public synchronized boolean tryWithdrawCoins(int amount) {
+        if (amount <= 0 || bankerCoins < amount || (long) coins + amount > Integer.MAX_VALUE) return false;
+        bankerCoins -= amount;
+        coins += amount;
+        return true;
     }
 
     public int getWorthiness() {
@@ -81,7 +107,14 @@ public class GuildPlayer {
 
     public void setWorthiness(int worthiness) {
         if (!hasSignedContract()) return;
-        this.worthiness = worthiness;
+        this.worthiness = Math.max(0, worthiness);
+    }
+
+    public synchronized int addWorthiness(int amount) {
+        if (!hasSignedContract() || amount <= 0) return 0;
+        int previous = this.worthiness;
+        this.worthiness = (int) Math.min(Integer.MAX_VALUE, (long) this.worthiness + amount);
+        return this.worthiness - previous;
     }
 
     public long getFarmerLastBread() {

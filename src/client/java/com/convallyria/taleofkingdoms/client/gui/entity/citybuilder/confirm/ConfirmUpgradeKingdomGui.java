@@ -9,6 +9,8 @@ import com.convallyria.taleofkingdoms.common.kingdom.PlayerKingdom;
 import com.convallyria.taleofkingdoms.common.packet.Packets;
 import com.convallyria.taleofkingdoms.common.packet.c2s.UpgradeKingdomPacket;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
 import com.convallyria.taleofkingdoms.managers.SoundManager;
 import io.wispforest.owo.ui.component.ButtonComponent;
 import io.wispforest.owo.ui.component.Components;
@@ -21,7 +23,6 @@ import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Items;
-import net.minecraft.server.integrated.IntegratedServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.text.Text;
@@ -77,35 +78,46 @@ public class ConfirmUpgradeKingdomGui extends BaseCityBuilderScreen {
                     return;
                 }
 
-                final IntegratedServer server = MinecraftClient.getInstance().getServer();
-                final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
-                final PlayerKingdom kingdom = instance.getPlayer(player).getKingdom();
-                if (serverPlayer == null || kingdom == null || !(serverPlayer.getWorld().getEntityById(entity.getId()) instanceof CityBuilderEntity serverCityBuilder)) return;
-                if (serverCityBuilder.getWood() < 320 || serverCityBuilder.getStone() < 320) return;
-                final BlockPos origin = kingdom.getOrigin();
+                TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
+                    final ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                    if (serverPlayer == null
+                            || !(serverPlayer.getWorld().getEntityById(entity.getId()) instanceof CityBuilderEntity serverCityBuilder)
+                            || serverPlayer.distanceTo(serverCityBuilder) > 5) return;
+                    final GuildPlayer guildPlayer = instance.getPlayer(serverPlayer);
+                    final PlayerKingdom kingdom = guildPlayer == null ? null : guildPlayer.getKingdom();
+                    if (kingdom == null) return;
 
-                // Paste their kingdom
-                final Optional<KingdomTier> nextTier = kingdom.getTier().next();
-                if (nextTier.isEmpty() || !kingdom.beginConstruction()) return;
-                final KingdomTier next = nextTier.get();
-
-                // Tier 2 has +49 blocks on z axis
-                // +15 on x
-                final BlockPos offsetPos = origin.subtract(next.getOffset());
-                TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(next.getSchematic(), serverPlayer, offsetPos).whenComplete((box, error) -> {
-                    kingdom.finishConstruction();
-                    if (error != null) {
-                        TaleOfKingdoms.LOGGER.error("Failed to upgrade kingdom for {}", serverPlayer.getName().getString(), error);
-                        serverPlayer.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.upgrade_failed"), false);
+                    final Optional<KingdomTier> nextTier = kingdom.getTier().next();
+                    if (nextTier.isEmpty()) return;
+                    final KingdomTier next = nextTier.get();
+                    if (!GuildQuestProgression.canUpgradeTo(instance, guildPlayer, next)) {
+                        serverPlayer.sendMessage(Text.translatable("message.taleofkingdoms.quest.upgrade_locked",
+                                guildPlayer.getWorthiness(), next.getRequiredWorthiness()), false);
                         return;
                     }
-                    BlockPos start = new BlockPos(box.getMaxX(), box.getMaxY(), box.getMaxZ());
-                    BlockPos end = new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ());
-                    kingdom.setStart(start);
-                    kingdom.setEnd(end);
-                    kingdom.setTier(next);
-                    serverCityBuilder.getInventory().removeItem(Items.OAK_LOG, 320);
-                    serverCityBuilder.getInventory().removeItem(Items.COBBLESTONE, 320);
+                    if (serverCityBuilder.getWood() < 320 || serverCityBuilder.getStone() < 320) return;
+                    if (!kingdom.hasCompletedTier(kingdom.getTier())) {
+                        serverPlayer.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.required_buildings"), false);
+                        return;
+                    }
+                    if (!kingdom.beginConstruction()) return;
+
+                    final BlockPos offsetPos = kingdom.getOrigin().subtract(next.getOffset());
+                    TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(next.getSchematic(), serverPlayer, offsetPos).whenComplete((box, error) -> {
+                        kingdom.finishConstruction();
+                        if (error != null) {
+                            TaleOfKingdoms.LOGGER.error("Failed to upgrade kingdom for {}", serverPlayer.getName().getString(), error);
+                            serverPlayer.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.upgrade_failed"), false);
+                            return;
+                        }
+                        kingdom.setStart(new BlockPos(box.getMaxX(), box.getMaxY(), box.getMaxZ()));
+                        kingdom.setEnd(new BlockPos(box.getMinX(), box.getMinY(), box.getMinZ()));
+                        kingdom.setTier(next);
+                        serverCityBuilder.settleInKingdom(serverPlayer, kingdom);
+                        serverCityBuilder.getInventory().removeItem(Items.OAK_LOG, 320);
+                        serverCityBuilder.getInventory().removeItem(Items.COBBLESTONE, 320);
+                        serverPlayer.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.upgrade_success", next.getName()), false);
+                    });
                 });
                 player.playSoundToPlayer(TaleOfKingdoms.getAPI().getManager(SoundManager.class).getSound(SoundManager.TOKSound.TOKTHEME), SoundCategory.MUSIC, 0.1f, 1f);
             })

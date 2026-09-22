@@ -22,6 +22,7 @@ import net.minecraft.entity.projectile.PersistentProjectileEntity;
 import net.minecraft.entity.projectile.ProjectileUtil;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.item.RangedWeaponItem;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
@@ -30,8 +31,13 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.UUID;
 
 public class HunterEntity extends TOKEntity implements RangedAttackMob {
+
+    private @Nullable UUID ownerUuid;
 
     private final BowAttackGoal<HunterEntity> bowAttackGoal = new BowAttackGoal<>(this, 0.6D, 20, 16.0F);
     private final MeleeAttackGoal meleeAttackGoal = new MeleeAttackGoal(this, 0.8D, false) {
@@ -60,7 +66,8 @@ public class HunterEntity extends TOKEntity implements RangedAttackMob {
         this.targetSelector.add(3, new ImprovedFollowTargetGoal<>(this, EntityTypes.REFICULE_MAGE, true));
         this.targetSelector.add(4, new ActiveTargetGoal<>(this, MobEntity.class, 100, true, true, livingEntity -> livingEntity instanceof Monster));
         this.goalSelector.add(2, new LookAtEntityGoal(this, PlayerEntity.class, 10.0F));
-        this.goalSelector.add(3, new FollowPlayerGoal(this, 0.8F, 5, 30));
+        this.goalSelector.add(3, new FollowPlayerGoal(this, 0.8F, 5, 30,
+                player -> ownerUuid == null || ownerUuid.equals(player.getUuid())));
         applyEntityAI();
     }
 
@@ -74,17 +81,35 @@ public class HunterEntity extends TOKEntity implements RangedAttackMob {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND) return ActionResult.FAIL;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient()) return ActionResult.SUCCESS;
+        if (ownerUuid != null && !ownerUuid.equals(player.getUuid())) {
+            player.sendMessage(net.minecraft.text.Text.translatable("message.taleofkingdoms.hunter.not_owner"), true);
+            return ActionResult.SUCCESS;
+        }
+        if (ownerUuid == null) ownerUuid = player.getUuid();
         if (this.getStackInHand(Hand.MAIN_HAND).getItem() == Items.IRON_SWORD) {
             this.setStackInHand(Hand.MAIN_HAND, new ItemStack(Items.BOW));
             this.updateAttackType();
-            if (player.getWorld().isClient()) Translations.HUNTER_BOW.send(player);
+            Translations.HUNTER_BOW.send(player);
         } else {
             this.setStackInHand(Hand.MAIN_HAND, new ItemStack(Items.IRON_SWORD));
-            if (player.getWorld().isClient()) Translations.HUNTER_SWORD.send(player);
+            Translations.HUNTER_SWORD.send(player);
             this.updateAttackType();
         }
-        return ActionResult.PASS;
+        return ActionResult.SUCCESS;
+    }
+
+    public void setOwner(PlayerEntity owner) {
+        this.ownerUuid = owner.getUuid();
+    }
+
+    public boolean isOwnedBy(PlayerEntity player) {
+        return ownerUuid != null && ownerUuid.equals(player.getUuid());
+    }
+
+    public @Nullable UUID getOwnerUuid() {
+        return ownerUuid;
     }
 
     @Override
@@ -137,5 +162,18 @@ public class HunterEntity extends TOKEntity implements RangedAttackMob {
     @Override
     public boolean canUseRangedWeapon(RangedWeaponItem weapon) {
         return weapon == Items.BOW;
+    }
+
+    @Override
+    public void writeCustomDataToNbt(NbtCompound nbt) {
+        super.writeCustomDataToNbt(nbt);
+        if (ownerUuid != null) nbt.putUuid("Owner", ownerUuid);
+    }
+
+    @Override
+    public void readCustomDataFromNbt(NbtCompound nbt) {
+        super.readCustomDataFromNbt(nbt);
+        this.ownerUuid = nbt.containsUuid("Owner") ? nbt.getUuid("Owner") : null;
+        this.updateAttackType();
     }
 }

@@ -44,12 +44,14 @@ public class GuildMasterEntity extends TOKEntity {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND) return ActionResult.FAIL;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient()) return ActionResult.SUCCESS;
         TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
+        if (api == null) return ActionResult.FAIL;
 
-        if (player instanceof ServerPlayerEntity) {
-            api.getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(player, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.GUILD_MASTER, this.getId()));
-            return ActionResult.FAIL;
+        if (player instanceof ServerPlayerEntity serverPlayer) {
+            api.getServerPacket(Packets.OPEN_CLIENT_SCREEN).sendPacket(serverPlayer, new OpenScreenPacket(OpenScreenPacket.ScreenTypes.GUILD_MASTER, this.getId()));
+            return ActionResult.SUCCESS;
         }
 
         return ActionResult.PASS;

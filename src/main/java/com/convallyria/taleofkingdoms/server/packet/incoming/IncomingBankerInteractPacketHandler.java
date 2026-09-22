@@ -26,6 +26,10 @@ public final class IncomingBankerInteractPacketHandler extends InServerPacketHan
         UUID uuid = player.getUuid();
         context.taskQueue().execute(() -> TaleOfKingdoms.getAPI().getConquestInstanceStorage().mostRecentInstance().ifPresent(instance -> {
             final int coins = packet.coins();
+            if (coins <= 0) {
+                reject(player, "Invalid coin amount.");
+                return;
+            }
             if (!instance.isInGuild(player)) {
                 reject(player, "Not in guild.");
                 return;
@@ -45,19 +49,15 @@ public final class IncomingBankerInteractPacketHandler extends InServerPacketHan
             }
 
             if (packet.method() == BankerMethod.DEPOSIT) {
-                if (guildPlayer.getCoins() < coins) {
-                    reject(player, "Not enough coins.");
+                if (!guildPlayer.tryDepositCoins(coins)) {
+                    reject(player, "Unable to deposit coins.");
                     return;
                 }
-                guildPlayer.setCoins(guildPlayer.getCoins() - coins);
-                guildPlayer.setBankerCoins(guildPlayer.getBankerCoins() + coins);
             } else {
-                if (guildPlayer.getBankerCoins() < coins) {
-                    reject(player, "Not enough coins.");
+                if (!guildPlayer.tryWithdrawCoins(coins)) {
+                    reject(player, "Unable to withdraw coins.");
                     return;
                 }
-                guildPlayer.setBankerCoins(guildPlayer.getBankerCoins() - coins);
-                instance.addCoins(uuid, coins);
             }
             ServerConquestInstance.sync(player, instance);
         }));

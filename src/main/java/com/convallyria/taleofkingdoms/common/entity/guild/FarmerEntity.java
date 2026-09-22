@@ -6,15 +6,12 @@ import com.convallyria.taleofkingdoms.common.translation.Translations;
 import com.convallyria.taleofkingdoms.common.entity.TOKEntity;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
-import com.convallyria.taleofkingdoms.server.TaleOfKingdomsServerAPI;
-import net.fabricmc.api.EnvType;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
@@ -42,7 +39,8 @@ public class FarmerEntity extends TOKEntity {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND || player.getWorld().isClient) return ActionResult.FAIL;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient) return ActionResult.SUCCESS;
 
         // Check if there is at least 1 Minecraft day difference
         final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
@@ -51,32 +49,22 @@ public class FarmerEntity extends TOKEntity {
 
         ConquestInstance instance = api.getConquestInstanceStorage().mostRecentInstance().get();
         final GuildPlayer guildPlayer = instance.getPlayer(player);
+        if (guildPlayer == null || !(player instanceof ServerPlayerEntity serverPlayer)) return ActionResult.FAIL;
 
         final long day = player.getWorld().getTimeOfDay() / 24000L;
         if (guildPlayer.getFarmerLastBread() >= day) {
             Translations.FARMER_GOT_BREAD.send(player);
-            return ActionResult.FAIL;
+            return ActionResult.SUCCESS;
         }
 
         // Set the current day and add bread to inventory
         guildPlayer.setFarmerLastBread(day);
         Translations.FARMER_TAKE_BREAD.send(player);
 
-        int amount = ThreadLocalRandom.current().nextInt(1, 4);
-        if (api.getEnvironment() == EnvType.CLIENT) {
-            api.executeOnMain(() -> {
-                MinecraftServer server = player.getServer();
-                if (server != null) {
-                    ServerPlayerEntity serverPlayerEntity = server.getPlayerManager().getPlayer(player.getUuid());
-                    if (serverPlayerEntity != null) {
-                        serverPlayerEntity.getInventory().insertStack(new ItemStack(Items.BREAD, amount));
-                    }
-                }
-            });
-        } else {
-            ((TaleOfKingdomsServerAPI) api).executeOnDedicatedServer(() -> player.getInventory().insertStack(new ItemStack(Items.BREAD, amount)));
-        }
-        return ActionResult.PASS;
+        ItemStack bread = new ItemStack(Items.BREAD, ThreadLocalRandom.current().nextInt(1, 4));
+        serverPlayer.getInventory().insertStack(bread);
+        if (!bread.isEmpty()) serverPlayer.dropItem(bread, false);
+        return ActionResult.SUCCESS;
     }
 
     @Override

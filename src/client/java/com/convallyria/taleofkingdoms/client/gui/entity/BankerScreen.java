@@ -17,6 +17,7 @@ import io.wispforest.owo.ui.container.FlowLayout;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
@@ -119,8 +120,17 @@ public class BankerScreen extends BaseUIModelScreen<FlowLayout> {
                     TaleOfKingdomsClient.getAPI().getClientPacket(Packets.BANKER_INTERACT)
                             .sendPacket(player, new BankerInteractPacket(method, coins));
                 } else {
-                    guildPlayer.setCoins(guildPlayer.getCoins() - coins);
-                    guildPlayer.setBankerCoins(guildPlayer.getBankerCoins() + coins);
+                    TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
+                        ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                        if (serverPlayer == null) return;
+                        GuildPlayer serverGuildPlayer = instance.getPlayer(serverPlayer);
+                        if (serverGuildPlayer == null || !serverGuildPlayer.tryDepositCoins(coins)) {
+                            Translations.BANK_ZERO.send(serverPlayer);
+                            return;
+                        }
+                        Translations.BANK_NO_SPEND.send(serverPlayer);
+                    });
+                    return;
                 }
                 Translations.BANK_NO_SPEND.send(player);
             } else {
@@ -132,8 +142,16 @@ public class BankerScreen extends BaseUIModelScreen<FlowLayout> {
                     TaleOfKingdomsClient.getAPI().getClientPacket(Packets.BANKER_INTERACT)
                             .sendPacket(player, new BankerInteractPacket(method, coins));
                 } else {
-                    guildPlayer.setBankerCoins(guildPlayer.getBankerCoins() - coins);
-                    instance.addCoins(player.getUuid(), coins);
+                    TaleOfKingdoms.getAPI().executeOnServerEnvironment(server -> {
+                        ServerPlayerEntity serverPlayer = server.getPlayerManager().getPlayer(player.getUuid());
+                        if (serverPlayer == null) return;
+                        GuildPlayer serverGuildPlayer = instance.getPlayer(serverPlayer);
+                        if (serverGuildPlayer == null || !serverGuildPlayer.tryWithdrawCoins(coins)) {
+                            Translations.BANK_ZERO.send(serverPlayer);
+                            return;
+                        }
+                        Translations.BANK_THERE.send(serverPlayer);
+                    });
                 }
             } else {
                 Translations.BANK_THERE.send(player);

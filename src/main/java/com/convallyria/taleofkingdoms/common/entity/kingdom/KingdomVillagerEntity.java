@@ -20,7 +20,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class KingdomVillagerEntity extends TOKEntity {
 
@@ -36,16 +35,14 @@ public class KingdomVillagerEntity extends TOKEntity {
             identifier("textures/entity/updated_textures/mansix.png")
     );
 
-    private final Identifier skin;
-
     public KingdomVillagerEntity(@NotNull EntityType<? extends PathAwareEntity> entityType, @NotNull World world) {
         super(entityType, world);
-        this.skin = VALID_SKINS.get(ThreadLocalRandom.current().nextInt(VALID_SKINS.size()));
+        randomizeSkinVariant(VALID_SKINS.size());
     }
 
     @Override
     public Optional<Identifier> getSkin() {
-        return Optional.of(skin);
+        return Optional.of(VALID_SKINS.get(getSkinVariant(VALID_SKINS.size())));
     }
 
     @Override
@@ -58,7 +55,8 @@ public class KingdomVillagerEntity extends TOKEntity {
 
     @Override
     protected ActionResult interactMob(PlayerEntity player, Hand hand) {
-        if (hand == Hand.OFF_HAND || player.getWorld().isClient) return ActionResult.FAIL;
+        if (hand == Hand.OFF_HAND) return ActionResult.PASS;
+        if (player.getWorld().isClient) return ActionResult.SUCCESS;
 
         final TaleOfKingdomsAPI api = TaleOfKingdoms.getAPI();
         if (api == null) return ActionResult.FAIL;
@@ -66,11 +64,11 @@ public class KingdomVillagerEntity extends TOKEntity {
 
         ConquestInstance instance = api.getConquestInstanceStorage().mostRecentInstance().get();
         final GuildPlayer guildPlayer = instance.getPlayer(player);
-        if (guildPlayer.getKingdom() != null) {
+        if (guildPlayer != null && guildPlayer.getKingdom() != null) {
             //todo: convert to worker if items are given
             Translations.VILLAGER_ASK_TO_WORK.send(player);
         }
-        return ActionResult.PASS;
+        return ActionResult.SUCCESS;
     }
 
     @Override
