@@ -1,5 +1,6 @@
 package com.convallyria.taleofkingdoms.server.packet.incoming;
 
+import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.TaleOfKingdomsAPI;
 import com.convallyria.taleofkingdoms.common.entity.EntityTypes;
 import com.convallyria.taleofkingdoms.common.entity.ShopEntity;

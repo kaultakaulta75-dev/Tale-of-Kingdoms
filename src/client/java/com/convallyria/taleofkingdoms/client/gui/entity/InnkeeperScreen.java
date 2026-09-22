@@ -1,5 +1,6 @@
 package com.convallyria.taleofkingdoms.client.gui.entity;
 
+import com.convallyria.taleofkingdoms.TaleOfKingdoms;
 import com.convallyria.taleofkingdoms.TaleOfKingdomsAPI;
 import com.convallyria.taleofkingdoms.client.gui.ScreenTOK;
 import com.convallyria.taleofkingdoms.common.entity.guild.InnkeeperEntity;
