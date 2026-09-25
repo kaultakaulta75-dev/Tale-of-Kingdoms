@@ -170,24 +170,26 @@ public class CityBuilderEntity extends TOKEntity implements InventoryOwner {
                 return;
             }
 
-            List<CompletableFuture<?>> placements = new ArrayList<>();
             final Schematic kingdomSchematic = kingdom.getTier().getSchematic();
             BlockPos newOrigin = kingdom.getOrigin().subtract(kingdom.getTier().getOffset());
-            placements.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(
-                    kingdomSchematic, serverPlayer, newOrigin, SchematicOptions.IGNORE_KINGDOM_VILLAGERS));
-            for (BuildCosts buildCost : BuildCosts.values()) {
-                if (kingdom.getTier() != buildCost.getTier()) continue;
-                final KingdomPOI kingdomPOI = buildCost.getKingdomPOI();
-                final Schematic schematic = buildCost.getSchematic();
-                final BlockPos buildPos = kingdom.getPOIPos(kingdomPOI);
-                if (kingdom.hasBuilt(buildCost) && schematic != null && buildPos != null) {
-                    placements.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(
-                            schematic, serverPlayer, buildPos, buildCost.getSchematicRotation(),
-                            SchematicOptions.IGNORE_KINGDOM_VILLAGERS));
+            CompletableFuture<Void> repair = TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(
+                    kingdomSchematic, serverPlayer, newOrigin, SchematicOptions.IGNORE_KINGDOM_VILLAGERS
+            ).thenCompose(ignored -> {
+                List<CompletableFuture<?>> buildings = new ArrayList<>();
+                for (BuildCosts buildCost : List.copyOf(kingdom.getBuiltBuildings())) {
+                    final KingdomPOI kingdomPOI = buildCost.getKingdomPOI();
+                    final Schematic schematic = buildCost.getSchematic();
+                    final BlockPos buildPos = kingdom.getPOIPos(kingdomPOI);
+                    if (schematic != null && buildPos != null) {
+                        buildings.add(TaleOfKingdoms.getAPI().getSchematicHandler().pasteSchematic(
+                                schematic, serverPlayer, buildPos, buildCost.getSchematicRotation(),
+                                SchematicOptions.IGNORE_KINGDOM_VILLAGERS));
+                    }
                 }
-            }
+                return CompletableFuture.allOf(buildings.toArray(CompletableFuture[]::new));
+            });
 
-            CompletableFuture.allOf(placements.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> {
+            repair.whenComplete((ignored, error) -> {
                 kingdom.finishConstruction();
                 if (error != null) {
                     TaleOfKingdoms.LOGGER.error("Failed to repair kingdom for {}", serverPlayer.getName().getString(), error);

@@ -25,6 +25,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.structure.StructurePlacementData;
 import net.minecraft.structure.processor.BlockIgnoreStructureProcessor;
 import net.minecraft.structure.processor.JigsawReplacementStructureProcessor;
@@ -120,6 +121,9 @@ public class ConquestInstance {
 
     private transient boolean didUpgrade;
     private transient boolean guildRebuildInProgress;
+    private transient long lastSuccessfulGuildRepair;
+
+    private static final long GUILD_REPAIR_COOLDOWN_MILLIS = 60_000L;
 
     public ConquestInstance(String name, BlockPos start, BlockPos end, BlockPos origin) {
         this.name = name;
@@ -152,6 +156,15 @@ public class ConquestInstance {
 
     public synchronized boolean isGuildRebuildInProgress() {
         return guildRebuildInProgress;
+    }
+
+    public synchronized long getGuildRepairCooldownSeconds(long now) {
+        long remaining = GUILD_REPAIR_COOLDOWN_MILLIS - (now - lastSuccessfulGuildRepair);
+        return remaining <= 0 ? 0 : (remaining + 999L) / 1000L;
+    }
+
+    public synchronized void recordSuccessfulGuildRepair(long completedAt) {
+        this.lastSuccessfulGuildRepair = completedAt;
     }
 
     public String getName() {
@@ -284,6 +297,24 @@ public class ConquestInstance {
 
     public List<UUID> getReficuleAttackers() {
         return reficuleAttackers;
+    }
+
+    /**
+     * Repairs attack state written by older versions where discarded enemies
+     * could leave an orphan UUID behind. This is called while the player is at
+     * the guild, so the small attack area and its entities are loaded.
+     */
+    public int reconcileReficuleAttackers(ServerWorld world) {
+        int before = reficuleAttackers.size();
+        reficuleAttackers.removeIf(uuid -> {
+            Entity entity = world.getEntity(uuid);
+            return entity == null || entity.isRemoved() || !entity.isAlive();
+        });
+        int removed = before - reficuleAttackers.size();
+        if (removed > 0) {
+            TaleOfKingdoms.LOGGER.info("Removed {} stale guild attacker entries", removed);
+        }
+        return reficuleAttackers.size();
     }
 
     public Map<UUID, GuildPlayer> getGuildPlayers() {

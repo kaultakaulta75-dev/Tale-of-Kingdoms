@@ -5,7 +5,10 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "StructureTypeAccessor",
+    "StructureTemplateAccessor",
+    "PalettedBlockInfoListInvoker",
     "common.EntityDeathEvent",
+    "common.EntityRemovalEvent",
     "common.EntityPickupItemEvent",
     "common.EntitySpawnEvent",
     "common.ItemMergeEvent",

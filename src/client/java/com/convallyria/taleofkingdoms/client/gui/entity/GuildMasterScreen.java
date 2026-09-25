@@ -15,20 +15,18 @@ import com.convallyria.taleofkingdoms.common.entity.EntityTypes;
 import com.convallyria.taleofkingdoms.common.entity.generic.HunterEntity;
 import com.convallyria.taleofkingdoms.common.entity.guild.GuildMasterEntity;
 import com.convallyria.taleofkingdoms.common.packet.Packets;
-import com.convallyria.taleofkingdoms.common.schematic.SchematicOptions;
 import com.convallyria.taleofkingdoms.common.utils.EntityUtils;
 import com.convallyria.taleofkingdoms.common.utils.InventoryUtils;
 import com.convallyria.taleofkingdoms.common.world.ConquestInstance;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildPlayer;
 import com.convallyria.taleofkingdoms.common.world.guild.GuildQuestProgression;
+import com.convallyria.taleofkingdoms.common.world.guild.GuildRepairService;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
 import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.MutableText;
@@ -132,31 +130,14 @@ public class GuildMasterScreen extends ScreenTOK {
                 api.executeOnServerEnvironment(server -> {
                     ServerPlayerEntity serverPlayerEntity = server.getPlayerManager().getPlayer(player.getUuid());
                     if (serverPlayerEntity == null) return;
-                    PlayerInventory serverPlayerInventory = serverPlayerEntity.getInventory();
-                    GuildPlayer serverGuildPlayer = instance.getPlayer(serverPlayerEntity);
-                    if (serverGuildPlayer == null) return;
-                    if (!instance.beginGuildRebuild()) return;
-                    if (!serverGuildPlayer.trySpendCoins(3000)) {
-                        instance.finishGuildRebuild();
-                        return;
-                    }
-                    if (!InventoryUtils.remove(serverPlayerInventory, ItemTags.LOGS, 64)) {
-                        serverGuildPlayer.tryCreditCoins(3000);
-                        instance.finishGuildRebuild();
-                        return;
-                    }
-                    instance.rebuild(serverPlayerEntity, api, SchematicOptions.IGNORE_DEFENDERS).whenComplete((box, error) -> {
-                        instance.finishGuildRebuild();
-                        if (error == null) {
-                            serverPlayerEntity.sendMessage(Text.translatable("message.taleofkingdoms.guild.repair_success"), false);
-                            return;
-                        }
-                        serverGuildPlayer.tryCreditCoins(3000);
-                        ItemStack refund = new ItemStack(Items.OAK_LOG, 64);
-                        serverPlayerInventory.insertStack(refund);
-                        if (!refund.isEmpty()) serverPlayerEntity.dropItem(refund, false);
-                        serverPlayerEntity.sendMessage(Text.translatable("message.taleofkingdoms.guild.rebuild_failed"), false);
-                    });
+                    GuildRepairService.requestRepair(
+                            serverPlayerEntity,
+                            instance,
+                            api,
+                            reason -> TaleOfKingdoms.LOGGER.info("Rejected integrated guild repair for {}: {}",
+                                    serverPlayerEntity.getName().getString(), reason),
+                            () -> { }
+                    );
                 });
             });
             this.close();

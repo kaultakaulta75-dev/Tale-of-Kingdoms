@@ -182,6 +182,8 @@
     "message.taleofkingdoms.kingdom.upgrade_failed": "The kingdom could not be upgraded. Your resources were not consumed.",
     "message.taleofkingdoms.guild.rebuild_failed": "The guild could not be rebuilt. Your coins and logs were refunded.",
     "message.taleofkingdoms.guild.repair_success": "The Guild castle has been fully repaired.",
+    "message.taleofkingdoms.guild.repair_cooldown": "The Guild was repaired recently. Wait %s more seconds.",
+    "message.taleofkingdoms.kingdom.incremental_construction": "Tier II construction has started. The castle will appear progressively to keep the world responsive.",
     "message.taleofkingdoms.hunter.not_owner": "This hunter serves another player.",
     "message.taleofkingdoms.hunter.not_found": "No living hunter could be found.",
     "message.taleofkingdoms.lost_villager.not_rescuer": "This villager is already following another player.",

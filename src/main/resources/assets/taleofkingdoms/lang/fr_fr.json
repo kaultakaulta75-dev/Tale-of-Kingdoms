@@ -170,6 +170,8 @@
     "message.taleofkingdoms.kingdom.upgrade_failed": "Le royaume n'a pas pu être amélioré. Tes ressources n'ont pas été consommées.",
     "message.taleofkingdoms.guild.rebuild_failed": "La guilde n'a pas pu être reconstruite. Tes pièces et tes bûches ont été remboursées.",
     "message.taleofkingdoms.guild.repair_success": "Le château de la Guilde a été entièrement réparé.",
+    "message.taleofkingdoms.guild.repair_cooldown": "La Guilde a été réparée récemment. Attends encore %s secondes.",
+    "message.taleofkingdoms.kingdom.incremental_construction": "La construction du niveau II a commencé. Le château apparaîtra progressivement pour éviter de bloquer le monde.",
     "message.taleofkingdoms.hunter.not_owner": "Ce chasseur sert déjà un autre joueur.",
     "message.taleofkingdoms.hunter.not_found": "Aucun chasseur vivant n'a été trouvé.",
     "message.taleofkingdoms.lost_villager.not_rescuer": "Ce villageois suit déjà un autre joueur.",

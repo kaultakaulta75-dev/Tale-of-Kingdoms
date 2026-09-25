@@ -95,6 +95,7 @@ public class GuildMasterDefenderEntity extends GuildMasterEntity {
         if (optionalInstance.isEmpty()) return ActionResult.FAIL;
         ConquestInstance instance = optionalInstance.get();
         if (instance.isUnderAttack()) {
+            int activeAttackers = instance.reconcileReficuleAttackers(serverPlayerEntity.getServerWorld());
             Set<Item> swords = Set.of(Items.IRON_SWORD, Items.STONE_SWORD, Items.DIAMOND_SWORD, Items.GOLDEN_SWORD, Items.WOODEN_SWORD, Items.NETHERITE_SWORD);
             if (!givenSword && !player.getInventory().containsAny(swords)) {
                 ItemStack sword = new ItemStack(Items.IRON_SWORD);
@@ -104,7 +105,7 @@ public class GuildMasterDefenderEntity extends GuildMasterEntity {
                 return ActionResult.SUCCESS;
             }
 
-            if (instance.getReficuleAttackers().isEmpty()) {
+            if (activeAttackers == 0) {
                 final GuildPlayer guildPlayer = instance.getPlayer(player);
                 if (guildPlayer != null && !guildPlayer.hasRebuiltGuild()
                         && guildPlayer.getWorthiness() >= GuildQuestProgression.DEFEND_GUILD_WORTHINESS
@@ -138,7 +139,7 @@ public class GuildMasterDefenderEntity extends GuildMasterEntity {
                     }
                     return ActionResult.SUCCESS;
                 }
-            } else if (instance.getReficuleAttackers().size() <= 4) {
+            } else if (activeAttackers <= 4) {
                 Translations.GUILDMASTER_KILL_REFICULES.send(player);
             } else {
                 Translations.GUILDMASTER_STAY_CLOSE.send(player);

@@ -63,15 +63,20 @@ public final class StructurePlacementUtils {
             return FoundationProblem.OUTSIDE_WORLD_BORDER;
         }
 
-        final int samplesPerAxis = 5;
+        // A five-by-five grid was too sparse for the 183 x 229 tier-two
+        // footprint. Keep roughly one sample every sixteen blocks, capped to
+        // avoid making the validation itself expensive.
+        final int samplesX = sampleCount(width);
+        final int samplesZ = sampleCount(depth);
+        final int totalSamples = samplesX * samplesZ;
         int minHeight = Integer.MAX_VALUE;
         int maxHeight = Integer.MIN_VALUE;
         int wetSamples = 0;
 
-        for (int sampleX = 0; sampleX < samplesPerAxis; sampleX++) {
-            int x = origin.getX() + interpolate(0, width - 1, sampleX, samplesPerAxis);
-            for (int sampleZ = 0; sampleZ < samplesPerAxis; sampleZ++) {
-                int z = origin.getZ() + interpolate(0, depth - 1, sampleZ, samplesPerAxis);
+        for (int sampleX = 0; sampleX < samplesX; sampleX++) {
+            int x = origin.getX() + interpolate(0, width - 1, sampleX, samplesX);
+            for (int sampleZ = 0; sampleZ < samplesZ; sampleZ++) {
+                int z = origin.getZ() + interpolate(0, depth - 1, sampleZ, samplesZ);
                 int groundY = world.getTopY(Heightmap.Type.OCEAN_FLOOR, x, z);
                 minHeight = Math.min(minHeight, groundY);
                 maxHeight = Math.max(maxHeight, groundY);
@@ -88,7 +93,7 @@ public final class StructurePlacementUtils {
         if (maxHeight - minHeight > maxHeightDifference) {
             return FoundationProblem.TOO_STEEP;
         }
-        if (wetSamples > 4) {
+        if (wetSamples * 5 > totalSamples) {
             return FoundationProblem.TOO_MUCH_WATER;
         }
         return FoundationProblem.NONE;
@@ -143,5 +148,9 @@ public final class StructurePlacementUtils {
     private static int interpolate(int min, int max, int sample, int sampleCount) {
         if (sampleCount <= 1) return min;
         return min + Math.round((max - min) * (sample / (float) (sampleCount - 1)));
+    }
+
+    private static int sampleCount(int length) {
+        return Math.max(5, Math.min(17, ((length - 1) / 16) + 2));
     }
 }

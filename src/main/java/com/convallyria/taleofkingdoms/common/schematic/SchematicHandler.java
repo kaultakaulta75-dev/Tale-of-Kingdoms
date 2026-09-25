@@ -11,6 +11,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.structure.StructurePlacementData;
 import net.minecraft.structure.StructureTemplate;
 import net.minecraft.structure.processor.JigsawReplacementStructureProcessor;
+import net.minecraft.text.Text;
 import net.minecraft.util.BlockRotation;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
@@ -101,6 +102,26 @@ public abstract class SchematicHandler {
             BlockPos placementPosition = Arrays.asList(options).contains(SchematicOptions.ALIGN_TO_TERRAIN)
                     ? alignToTerrain(schematic, player, structure, position, rotation)
                     : position;
+            if (schematic == Schematic.TIER_2_KINGDOM) {
+                player.sendMessage(Text.translatable("message.taleofkingdoms.kingdom.incremental_construction"), false);
+                movePlayerOutsideConstruction(player, structure.calculateBoundingBox(structurePlacementData, placementPosition));
+                IncrementalStructurePlacer.place(
+                        structure,
+                        player.getServerWorld(),
+                        placementPosition,
+                        structurePlacementData,
+                        Random.create(),
+                        Block.NOTIFY_ALL
+                ).whenComplete((box, error) -> {
+                    if (error != null) {
+                        TaleOfKingdoms.LOGGER.error("Unable to place incremental schematic {}", schematic, error);
+                        cf.completeExceptionally(error);
+                    } else {
+                        cf.complete(box);
+                    }
+                });
+                return;
+            }
             boolean placed = structure.place(
                     player.getServerWorld(),
                     placementPosition,
@@ -122,6 +143,17 @@ public abstract class SchematicHandler {
             TaleOfKingdoms.LOGGER.error("Unable to place schematic {}", schematic, error);
             cf.completeExceptionally(error);
         }
+    }
+
+    private void movePlayerOutsideConstruction(ServerPlayerEntity player, BlockBox box) {
+        int safeX = box.getMaxX() + 4;
+        int safeZ = (box.getMinZ() + box.getMaxZ()) / 2;
+        BlockPos candidate = new BlockPos(safeX, player.getBlockY(), safeZ);
+        if (!player.getServerWorld().getWorldBorder().contains(candidate)) {
+            safeX = box.getMinX() - 4;
+        }
+        int safeY = player.getServerWorld().getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, safeX, safeZ);
+        player.requestTeleport(safeX + 0.5D, safeY, safeZ + 0.5D);
     }
 
     private BlockPos alignToTerrain(Schematic schematic,
